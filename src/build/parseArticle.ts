@@ -2,9 +2,9 @@
 // 并把 post.json 原样复制为 .cache/post.json（可import 同源副本，供 PostUpdate / search 读元数据）
 // 由 vite buildStart 调用。
 //
-// 职责边界：编译期只做「md → html」与「解析元数据」两件事。
-// 侧栏树是手写配置 src/config/sidebar.json（结构照 VitePress 的 themeConfig.sidebar），
-// 不再由本脚本扫盘生成 —— 分组与顺序属于内容组织决策，写在配置里比让脚本猜目录名更可控。
+// 职责边界：编译期做「md → html」、「解析元数据」与「由目录结构派生侧栏树」三件事。
+// 侧栏树不再手写配置 —— 由 docs/ 的目录结构派生（见 deriveSidebar）：分组即目录、同级自然序，
+// 新增/改名文档后侧栏自动跟随。同一棵树既产出 .cache/sidebar.json，又用于推导上下篇。
 //
 // 写作组件已插件化（src/build/plugins/）：fence 组件（mermaid/timeline/steps/tabs/links/gallery）
 // 与容器组件（:::tip/info/warn/error 提示块）各自独立成插件，registry.ts 统一登记；
@@ -34,7 +34,7 @@ import {
 } from './plugins/registry.ts'
 import { toolbar, splitRow } from './plugins/base.ts'
 
-// 上下篇链接：编译期按 sidebar.json 展平顺序推导，首篇无 prev、末篇无 next
+// 上下篇链接：编译期按侧栏派生树的展平顺序推导，首篇无 prev、末篇无 next
 type PostNavLink = {
   title: string
   link: string
@@ -69,7 +69,7 @@ const KNOWN_LANGS: ReadonlySet<string> = new Set([
 let highlighter: Highlighter | null = null
 
 // 扫盘最大层级：docs/ 下的第一层目录算第 1 级，超出深度的分支整体不纳入编译
-// （侧栏树已改为手写配置 src/config/sidebar.json，此处只约束正文 SFC 的产出深度）
+// （侧栏树同源于该扫描结果，超出深度的分支同样不进侧栏）
 
 // 脚本文件路径 → 项目根路径 → 各产物路径
 const scriptPath = fileURLToPath(import.meta.url)
@@ -79,6 +79,8 @@ const articlePath = path.join(rootPath, ARTICLE_DIR)
 const vuePath = path.join(rootPath, '.cache')
 const jsonPath = path.join(rootPath, 'public/config/post.json')
 const postMetaPath = path.join(vuePath, 'post.json')
+const sidebarPath = path.join(rootPath, 'public/config/sidebar.json')
+const sidebarMetaPath = path.join(vuePath, 'sidebar.json')
 
 /*
  * id: ensureJsonDir
@@ -98,8 +100,8 @@ const ensureJsonDir = () => {
  * 签名必须掺入本脚本自身的 mtime/size：元数据提取逻辑（如 updated 的兜底来源）改动后，
  * docs/ 一个字没变，签名却必须变化，否则缓存短路会让新逻辑要手动清 .cache 才生效
  *
- * 同样必须掺入 sidebar.json：上下篇是按侧栏展平顺序算的，只改侧栏而 docs/ 未动时，
- * 签名若不变就会短路复用缓存，上下篇永远停在旧顺序
+ * 侧栏树改由 docs/ 目录结构派生后，不再需要单独掺入配置文件：文件的增删改已由下面的
+ * files 列表覆盖（新增目录 = 新增文件），所以只改目录结构也一定会让签名变化。
  *
  * 组件插件化后还必须掺入 plugins/ 下所有插件文件：只改组件外壳而 docs/ 未动时，
  * 签名若不变就会短路复用缓存，新组件产物永远不会生效
@@ -107,14 +109,6 @@ const ensureJsonDir = () => {
 const compileSignature = (files: string[]): string => {
   const self = fs.statSync(scriptPath)
   const selfTag = `__self__:${self.mtimeMs}:${self.size}`
-  const sidebarTag = (() => {
-    try {
-      const s = fs.statSync(path.join(rootPath, 'src/config/sidebar.json'))
-      return `__sidebar__:${s.mtimeMs}:${s.size}`
-    } catch {
-      return '__sidebar__:missing' // 侧栏缺失时也要占位，否则删掉侧栏不触发重编译
-    }
-  })()
   const pluginTags = (() => {
     try {
       const dir = path.join(dirPath, 'plugins')
@@ -131,7 +125,6 @@ const compileSignature = (files: string[]): string => {
   })()
   return [
     selfTag,
-    sidebarTag,
     ...pluginTags,
     ...files.map((f) => {
       const s = fs.statSync(path.join(articlePath, f))
@@ -312,6 +305,17 @@ const syncPostMeta = () => {
 }
 
 /*
+ * id: syncSidebarMeta
+ * fn: 与 syncPostMeta 同理：public/ 下的静态资源不进 Vite 模块图，无法 import；
+ * 把编译期派生的 sidebar.json 原样复制到 .cache/，得到可 import 的同源副本供 theme 侧同步读
+ */
+const syncSidebarMeta = () => {
+  if (fs.existsSync(sidebarPath)) {
+    fs.copyFileSync(sidebarPath, sidebarMetaPath)
+  }
+}
+
+/*
  * id: syncSiteConfig
  * fn: 把 src/config/site.ts 全量写进 .cache/site.json——站点配置编译期写死进产物，
  * theme 内不再 import 配置源文件，统一从这份产物同步读（SSG 预渲染和客户端一致）
@@ -422,6 +426,102 @@ const configFence = (md: InstanceType<typeof MarkdownIt>) => {
   }
 }
 
+/* ====================<侧栏树派生>==================== */
+// 结构与 theme 侧 composables/sidebar.ts 的 SidebarNode 一致：text 显示名、link 可点入口、items 子项
+type SidebarNode = {
+  text: string
+  link?: string
+  items?: SidebarNode[]
+}
+
+/*
+ * id: naturalCompare
+ * fn: 自然序比较器：数字段按数值比较
+ * 必须用自然序 —— docs 里有 css-基础-1…css-基础-25、stm32-1…stm32-24，
+ * 纯字典序会把 css-基础-10 排到 css-基础-2 之前
+ */
+const collator = new Intl.Collator('zh-Hans-CN', { numeric: true, sensitivity: 'base' })
+const naturalCompare = (a: string, b: string) => collator.compare(a, b)
+
+/*
+ * id: deriveSidebar
+ * fn: 由 walkDocs 扫出的文件 id 列表派生侧栏树
+ * 规则：
+ *  - id 按 / 切段，中间段是目录 → 分组节点（无 link，纯折叠容器），末段是文件 → 叶子节点
+ *  - 叶子 text 取文件名去 .md，与 post.json 的 title 推导（id.split('/').pop()）一致，
+ *    保证侧栏、上下篇、搜索三处显示同一个名字
+ *  - 分组 text 取目录名原样（目录名即章节名，不做映射）
+ *  - 同级目录在前、文件在后，各自自然序
+ * 注意：theme 侧分组 key 用祖先 text 链拼接（sidebar.ts），同级同名目录会撞 key —— docs 现状无同名兄弟目录
+ */
+const deriveSidebar = (files: string[]): SidebarNode[] => {
+  const root: SidebarNode[] = []
+  // 目录路径前缀 → 分组节点，避免同一目录被重复建节点
+  const folderMap = new Map<string, SidebarNode>()
+
+  // 逐级向上补建分组：目录 xxx/yyy/zzz 会连带建出 xxx、xxx/yyy
+  const ensureFolder = (prefix: string): SidebarNode => {
+    const existed = folderMap.get(prefix)
+    if (existed) return existed
+    const node: SidebarNode = { text: prefix.slice(prefix.lastIndexOf('/') + 1), items: [] }
+    folderMap.set(prefix, node)
+    const slash = prefix.lastIndexOf('/')
+    if (slash === -1) {
+      root.push(node)
+    } else {
+      ensureFolder(prefix.slice(0, slash)).items!.push(node)
+    }
+    return node
+  }
+
+  for (const file of files) {
+    const id = file.replace(/\.md$/, '')
+    const segs = id.split('/')
+    const leafName = segs.pop()!
+    const leaf: SidebarNode = { text: leafName, link: `/post/${id}` }
+    if (segs.length === 0) {
+      root.push(leaf) // docs/ 根目录下的散篇，直接作为顶级叶子
+    } else {
+      ensureFolder(segs.join('/')).items!.push(leaf)
+    }
+  }
+
+  const sortNodes = (nodes: SidebarNode[]) => {
+    nodes.sort((a, b) => {
+      const rank = (n: SidebarNode) => (n.items ? 0 : 1) // 目录(0) 排在 文件(1) 之前
+      return rank(a) !== rank(b) ? rank(a) - rank(b) : naturalCompare(a.text, b.text)
+    })
+    for (const node of nodes) {
+      if (node.items) sortNodes(node.items)
+    }
+  }
+  sortNodes(root)
+  return root
+}
+
+/*
+ * id: flattenSidebar
+ * fn: DFS 展平派生树，只收有 link 的叶子，顺序即侧栏顺序 —— 上下篇按它取相邻下标
+ */
+const flattenSidebar = (nodes: SidebarNode[]): { id: string; title: string; link: string }[] => {
+  const out: { id: string; title: string; link: string }[] = []
+  const walk = (list: SidebarNode[]) => {
+    for (const node of list) {
+      if (node.link) {
+        // id 即 link 去掉 /post/ 前缀，与 .cache/<id>.vue、route.params.pathMatch 同一套键
+        out.push({
+          id: node.link.replace(/^\/post\//, ''),
+          title: node.text,
+          link: node.link,
+        })
+      }
+      if (node.items && node.items.length > 0) walk(node.items)
+    }
+  }
+  walk(nodes)
+  return out
+}
+
 /*
  * id: mdParser
  * fn: 解析md，将md的内容和元数据分别写入对应文件
@@ -461,42 +561,26 @@ const mdParser = (files: string[]) => {
     }
   }
 
-  // ---- 编译期算上下篇：读 sidebar.json 展平取有序文章列表，为每篇算 prev/next ----
-  const sidebarFile = path.join(rootPath, 'src/config/sidebar.json')
-  if (fs.existsSync(sidebarFile)) {
-    const sidebarTree = JSON.parse(fs.readFileSync(sidebarFile, 'utf8'))
-    // DFS 展平：只收集有 link 的叶子节点，顺序即配置书写顺序
-    const flat: { id: string; title: string; link: string }[] = []
-    const walkSidebar = (nodes: any[]) => {
-      for (const node of nodes) {
-        if (node.link) {
-          flat.push({
-            id: node.link.replace(/^\/post\//, ''),
-            title: node.text || '',
-            link: node.link,
-          })
-        }
-        if (Array.isArray(node.items) && node.items.length > 0) {
-          walkSidebar(node.items)
-        }
-      }
-    }
-    walkSidebar(sidebarTree)
-    // 为每篇文章算 prev/next，写进 articles 元数据
-    for (let i = 0; i < flat.length; i++) {
-      // noUncheckedIndexedAccess 下 flat[i] 判为可能 undefined，先取出再做空值收敛
-      const cur = flat[i]
-      if (!cur) continue
-      const target = articles[cur.id]
-      if (!target) continue // 侧栏里配了但 docs 下无对应文章的项，静默跳过
-      const prev = i > 0 ? (flat[i - 1] ?? null) : null
-      const next = i < flat.length - 1 ? (flat[i + 1] ?? null) : null
-      target.prev = prev ? { title: prev.title, link: prev.link } : null
-      target.next = next ? { title: next.title, link: next.link } : null
-    }
+  // ---- 侧栏树：由扫盘结果派生，同一棵树既写盘供 theme 读，又用于推导上下篇 ----
+  // 单一事实源：侧栏顺序 = 上下篇顺序，不存在配置与目录两处打架的可能
+  const sidebarTree = deriveSidebar(files)
+  ensureJsonDir() // 本函数首个写入点，父目录在这里兜底（jsonPathChecker 可能因短路未执行）
+  fs.writeFileSync(sidebarPath, JSON.stringify(sidebarTree, null, 4), 'utf8')
+
+  // 按派生树的展平顺序为每篇文章算 prev/next，写进 articles 元数据
+  const flat = flattenSidebar(sidebarTree)
+  for (let i = 0; i < flat.length; i++) {
+    // noUncheckedIndexedAccess 下 flat[i] 判为可能 undefined，先取出再做空值收敛
+    const cur = flat[i]
+    if (!cur) continue
+    const target = articles[cur.id]
+    if (!target) continue // 理论上不会命中，兜一层以防派生树与 articles 不同源
+    const prev = i > 0 ? (flat[i - 1] ?? null) : null
+    const next = i < flat.length - 1 ? (flat[i + 1] ?? null) : null
+    target.prev = prev ? { title: prev.title, link: prev.link } : null
+    target.next = next ? { title: next.title, link: next.link } : null
   }
 
-  ensureJsonDir() // 本函数首个写入点，父目录在这里兜底（jsonPathChecker 可能因短路未执行）
   fs.writeFileSync(jsonPath, JSON.stringify(articles, null, 4), 'utf8')
   return articles
 }
@@ -518,7 +602,9 @@ const manager = async () => {
     vuePathChecker(new Set())
     ensureJsonDir()
     fs.writeFileSync(jsonPath, '{}', 'utf8')
+    fs.writeFileSync(sidebarPath, '[]', 'utf8')
     syncPostMeta()
+    syncSidebarMeta()
     fs.writeFileSync(path.join(vuePath, '.compile-sig.pending'), compileSignature([]), 'utf8')
     return
   }
@@ -533,6 +619,7 @@ const manager = async () => {
   if (postJsonExists && (readIfExists(sigFile) === sig || readIfExists(pendingFile) === sig)) {
     console.log('[INFO]:输入未变,短路复用.cache编译缓存')
     syncPostMeta() // .cache 被清时补建可 import 副本，保证 SSR 每次构建都读得到
+    syncSidebarMeta() // 侧栏副本同理：短路时也要保证 .cache/sidebar.json 存在
     syncSiteConfig() // 配置产物同样补建：短路分支也要保证 site.json 存在
     return
   }
@@ -545,17 +632,19 @@ const manager = async () => {
   // 4. 配置markdown-it并编译文章（编译期完成 shiki 高亮，运行时无需再处理）
   mdParser(files)
   syncPostMeta() // 复制为可 import 的同源副本，供 PostUpdate / search 读元数据
+  syncSidebarMeta() // 侧栏产物同理，供 theme 侧侧栏同步读
   syncSiteConfig() // 站点配置写进 .cache/site.json，theme 内同步读
   // 只写 pending：此刻仅是 buildStart 完成，vite 打包与 SSG 渲染尚未发生，构建不算成功。
-  // 正式签名由 vite.config.ts 的 onFinished 调 finalizeSignature 转正；
-  // 本轮中途失败时正式签名保持旧值，下次构建不会短路，全部重来
+  // 转正由 vite.config.ts 负责 —— build 走 onFinished、dev 走 buildStart（详见 finalizeSignature）；
+  // 本轮中途抛错时不会转正，正式签名保持旧值，下次不会短路，全部重来
   fs.writeFileSync(pendingFile, sig, 'utf8')
 }
 
 /*
  * id: finalizeSignature
- * fn: 构建成功后由 vite.config.ts 的 onFinished 调用：pending 签名转正。
- * 只有完整走完全部构建流程的签名才配短路下次构建（产物与签名同源）
+ * fn: pending 签名转正，由两处调用：构建成功后 vite.config.ts 的 onFinished，
+ * 以及 dev 编译完成后 vite.config.ts 的 buildStart（dev 到不了 onFinished）。
+ * 转正后正式签名即描述磁盘上那份产物，输入回退到旧状态时才不会误判短路
  */
 export const finalizeSignature = () => {
   const pendingFile = path.join(vuePath, '.compile-sig.pending')

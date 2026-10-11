@@ -63,9 +63,10 @@ const isExternal = (link: string): boolean => /^https?:\/\//.test(link)
 }
 
 @media (max-width: 768px) {
-  /* [响应式-sm] 手机 */
-  .nav-links {
-    gap: 16px;
+  /* [响应式-sm] 手机：站内导航收起（同 VitePress 手机端把导航项收进菜单），
+     顶栏只留 Logo / 搜索 / 工具图标，避免再挤出一行 */
+  .nav {
+    display: none;
   }
 }
 

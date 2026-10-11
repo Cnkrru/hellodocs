@@ -18,7 +18,7 @@ type PostMeta = { title: string; date: string; updated: string }
 const metaMap = import.meta.glob<PostMeta>('/.cache/post.json', { eager: true, import: 'default' })
 const postMeta = metaMap['/.cache/post.json'] as Record<string, PostMeta> | undefined
 
-/** 最近更新：不在侧栏里的文档（如被移出 sidebar.json）不进列表，避免首页出现无主条目 */
+/** 最近更新：侧栏有序表中带 updated 的文档，按时间取最新 8 条 */
 const recent = computed(() =>
   flatPosts
     .map((post) => ({ ...post, updated: postMeta?.[post.id]?.updated ?? '' }))

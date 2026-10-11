@@ -415,6 +415,15 @@
   .content h4 {
     font-size: 1.05em;
   }
+  /* 顶栏在手机上换成两行（第二行是本地导航条），锚点跳转的避让高度随之上调 */
+  .content h1,
+  .content h2,
+  .content h3,
+  .content h4,
+  .content h5,
+  .content h6 {
+    scroll-margin-top: 104px;
+  }
   .content pre {
     padding: 12px;
     font-size: 13px;

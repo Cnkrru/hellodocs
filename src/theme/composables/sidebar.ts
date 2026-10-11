@@ -1,20 +1,19 @@
 /*
- * 侧栏树：数据源是手写配置 src/theme/config/sidebar.json（结构照 VitePress 的 themeConfig.sidebar）
+ * 侧栏树：数据源是编译期产物 .cache/sidebar.json
  *
- * 手写而非编译期生成的理由：
- *  - 编译期只做「md → html + 解析元数据」两件事，侧栏的分组/顺序/命名属于内容组织决策，
- *    写进配置比让脚本猜目录名更可控（目录名 ≠ 章节名的情况在 docs/ 里很常见）
- *  - 上下篇由本文档树的展平顺序推出，配置即唯一事实源，不存在两处顺序打架的可能
+ * 树本身由编译期从 docs/ 的目录结构派生（parseArticle.ts 的 deriveSidebar）：
+ * 分组即目录、同级自然序，新增/改名文档后侧栏自动跟随，不再需要手工登记。
+ * 上下篇与侧栏共用这棵树的展平顺序，不存在两处顺序打架的可能。
  *
- * 配置在模块顶层 import —— 不放 onMounted，这样 SSG/SSR 阶段侧栏就能完整渲染，
+ * glob 而非静态 import：首次构建该产物可能尚未生成，glob 返回空对象而非编译报错
+ * 在模块顶层读取 —— 不放 onMounted，这样 SSG/SSR 阶段侧栏就能完整渲染，
  * 不会出现"JS 到达前左边一根空条"的布局跳动
  */
 
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import sidebarConfig from '@config/sidebar.json'
 
-// 结构照 VitePress 的 SidebarItem：text 为显示名，link 为可点击入口，items 为子项
+// 结构由编译期派生：text 为显示名，link 为可点击入口，items 为子项
 // 不含 collapsed —— 分组固定展开，只在用户手动点箭头时才折叠（状态记在组件内，不进配置）
 export type SidebarNode = {
   text: string
@@ -22,7 +21,12 @@ export type SidebarNode = {
   items?: SidebarNode[]
 }
 
-const sidebarTree: SidebarNode[] = sidebarConfig
+const sidebarMap = import.meta.glob<SidebarNode[]>('/.cache/sidebar.json', {
+  eager: true,
+  import: 'default',
+})
+
+const sidebarTree: SidebarNode[] = sidebarMap['/.cache/sidebar.json'] ?? []
 
 /** 节点是否含子项（含空分组） */
 const hasItems = (node: SidebarNode): boolean => Array.isArray(node.items) && node.items!.length > 0
@@ -31,9 +35,9 @@ const hasItems = (node: SidebarNode): boolean => Array.isArray(node.items) && no
  * 展平：一次 DFS 同时产出两张表 ——
  *
  * flatNodes  带层级信息的全量节点表（分组 + 叶子），侧栏按它渲染，靠 depth 做缩进、ancestors 判可见性
- * flatPosts  只含有 link 的节点的有序表，上一篇/下一篇按它取相邻下标
+ * flatPosts  只含有 link 的节点的有序表（首页「快速开始」与「最近更新」按它取序列）
  *
- * 两张表顺序一致（都是 DFS），故上下篇顺序即配置里的书写顺序，
+ * 两张表顺序一致（都是 DFS），故顺序即编译期派生树的顺序，
  * 不需要 frontmatter 里那个至今无人填写的 order 字段
  *
  * 展平而非运行时递归搜树，是因为「当前文章落在哪个分组」要靠 ancestors 反查，
@@ -83,21 +87,14 @@ export const flatPosts: readonly FlatPost[] = postsOut
  * 默认全收起，切到哪个文件就展开到哪个文件
  */
 export const activeBranchOf = (currentPath: string): Set<string> => {
-  const node = nodesOut.find((n) => n.link === currentPath)
+  // route.path 里的非 ASCII 是百分号编码的（/post/%E7%A1%AC%E4%BB%B6/…），
+  // 而树里的 link 是原始中文，须先解码再比对，否则中文文档永远找不到所在分支
+  const decodedPath = decodeURIComponent(currentPath)
+  const node = nodesOut.find((n) => n.link === decodedPath)
   if (!node) return new Set()
   const keys = new Set(node.ancestors)
   if (node.isFolder) keys.add(node.key)
   return keys
-}
-
-/**
- * 当前文章的相邻文档：取扁平表中的前后邻居
- * 首篇无上一篇、末篇无下一篇，对应项留空串
- */
-export const neighborOf = (currentPath: string): { pre: FlatPost | null; next: FlatPost | null } => {
-  const i = flatPosts.findIndex((p) => p.link === currentPath)
-  if (i === -1) return { pre: null, next: null }
-  return { pre: flatPosts[i - 1] ?? null, next: flatPosts[i + 1] ?? null }
 }
 
 /*

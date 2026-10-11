@@ -41,7 +41,7 @@ export const HOME_CARDS: HomeCard[] = [
 // ---- 顶栏导航：手写在配置里，加/删/改顺序只动这个数组 ----
 // link 两种写法，靠是否以 http(s):// 开头区分：
 //  站内  /            —— 首页
-//        /post/<id>   —— 文章页，id 是 docs/ 下的相对路径去掉 .md（与 sidebar.json 的 link 同一套键，可直接复制）
+//        /post/<id>   —— 文章页，id 是 docs/ 下的相对路径去掉 .md
 //  外链  https://...  —— 用原生 a 打开新窗口
 // 只指向具体文档页：不认 /post/电气 这类分组前缀（分组没有落地页，点了会落到 404）
 export type NavItem = { text: string; link: string }
@@ -52,7 +52,7 @@ export const SITE_NAV: NavItem[] = [
 
 // ---- 仓库配置：postEdit / postHistory 由此拼出 GitHub 的编辑页与提交历史页 ----
 // owner/repo：仓库地址，留空则文章页不渲染「编辑 / 历史」两个入口（避免死链）
-export const SITE_REPO = 'Cnkrru/krudoc'
+export const SITE_REPO = 'Cnkrru/KruDocs'
 // 分支名：GitHub 默认主分支为 main
 export const SITE_REPO_BRANCH = 'main'
 // 文档在仓库中的根目录，须与上面的 ARTICLE_DIR 一致

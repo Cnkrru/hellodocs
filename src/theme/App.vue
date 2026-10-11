@@ -62,6 +62,9 @@ body {
   max-width: 1360px;
   margin: 0 auto;
   padding: 0 24px;
+  /* 无全局 border-box 重置，须显式声明：否则 width:100% + 左右 padding
+     会让外层比视口宽出 padding 那么多，整页出现横向滚动条 */
+  box-sizing: border-box;
 }
 
 /* ---- 响应式 ---- */

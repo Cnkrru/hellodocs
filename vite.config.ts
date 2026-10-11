@@ -56,6 +56,12 @@ function walkVue(root: string, dir = root): string[] {
   return out
 }
 
+// dev（serve）下不会走到 ssgOptions.onFinished，正式签名也就无处转正，会一直停在上次 build 的
+// 输入状态；但 dev 编译已经改写了 .cache 产物，签名与产物就此脱钩 —— 输入一旦回退到那次 build
+// 的状态，就会误判"未变"而短路，留下上一个状态的产物（幽灵文章页/幽灵侧栏项）。
+// 故 dev 编译完成后同样转正，保证"正式签名始终描述磁盘上那份产物"
+let isServe = false
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -68,8 +74,14 @@ export default defineConfig({
     }),
     {
       name: 'compile-articles',
+      configResolved(config) {
+        isServe = config.command === 'serve'
+      },
       async buildStart() {
         await compileArticles()
+        // 转正放在短路分支之外：compileArticles 短路时 pending 描述的仍是磁盘上那份产物，
+        // 直接沿用即可，两条路径都能让正式签名与产物对齐
+        if (isServe) finalizeSignature()
       },
     },
   ],
@@ -149,7 +161,7 @@ export default defineConfig({
     alias: {
       // @ 指向 theme：theme 内是完整 Vue 框架，内部引用不带 theme 前缀（@/components）
       '@': fileURLToPath(new URL('./src/theme', import.meta.url)),
-      // @config 指向 src/config：编译期输入的配置（site.ts / sidebar.json），theme 内经此别名引用
+      // @config 指向 src/config：编译期输入的配置（site.config.ts），theme 内经此别名引用
       '@config': fileURLToPath(new URL('./src/config', import.meta.url)),
     },
   },

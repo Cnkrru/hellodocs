@@ -14,7 +14,9 @@
  * 内的字面量（代码块走 fence/text 管线，不经过行内规则）。
  */
 import type MarkdownIt from 'markdown-it'
-import type StateInline from 'markdown-it/lib/rules_inline/state_inline.mjs'
+// StateInline 从 markdown-it 主入口取：markdown-it 15 自带类型并导出该类型，
+// 深层路径 markdown-it/lib/... 会落到 @types/markdown-it 的旧声明，两套 StateInline 结构不一致，类型检查报错
+import type { StateInline } from 'markdown-it'
 import type { ComponentPlugin } from './base.ts'
 
 /*

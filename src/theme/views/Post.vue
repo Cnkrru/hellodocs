@@ -2,7 +2,6 @@
 import { computed, defineAsyncComponent, shallowRef, watch, type Component } from 'vue'
 import { useRoute } from 'vue-router'
 import PostToc from '@/components/post/PostToc.vue'
-import PostTocMobile from '@/components/post/PostTocMobile.vue'
 import PostSidebar from '@/components/post/PostSidebar.vue'
 import Render from '@/components/post/Render.vue'
 import PostNav from '@/components/post/PostNav.vue'
@@ -41,7 +40,6 @@ watch(
     </aside>
 
     <div class="post-main">
-      <PostTocMobile />
       <Render v-if="content">
         <component :is="content" />
       </Render>
@@ -115,32 +113,6 @@ watch(
   gap: var(--space-md);
 }
 
-/* ---- 汉堡按钮：仅移动端显示 ---- */
-.hamburger {
-  display: none;
-  width: 34px;
-  height: 34px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--g-color) 15%, transparent);
-  border-radius: 5px;
-  background: none;
-  color: color-mix(in srgb, var(--g-text) 55%, transparent);
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-}
-.hamburger:hover {
-  color: var(--g-color);
-  border-color: var(--g-color);
-  background: color-mix(in srgb, var(--g-color) 8%, transparent);
-}
-.hamburger svg {
-  width: 16px;
-  height: 16px;
-  display: block;
-}
-
 /* ---- 侧栏抽屉遮罩 ---- */
 .sidebar-mask {
   display: none;
@@ -186,9 +158,6 @@ watch(
   .post-sidebar.open {
     transform: translateX(0);
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
-  }
-  .hamburger {
-    display: flex;
   }
   .sidebar-mask {
     display: block;

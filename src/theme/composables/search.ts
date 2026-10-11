@@ -4,7 +4,7 @@ import { getRouter } from '@/router'
 
 /* ====================<search>==================== */
 type SearchDoc = { id: string; title: string; date: string; tags: string[] }
-type PostMeta = { title?: string; date?: string; tags?: string[] }
+type PostMeta = { title?: string; updated?: string; tags?: string[] }
 
 export const RefKeyword = ref('')
 export const RefSearchRes = ref<SearchDoc[]>([])
@@ -43,9 +43,10 @@ export const buildIndex = () => {
 
   try {
     const postMeta = metaMap['/.cache/post.json'] ?? {}
-    // krudoc 的 post.json 无 order 字段（parseArticle 不派生），按日期倒序取全部文章
+    // krudoc 的 post.json 无 date 字段（parseArticle 只派生 title/updated），
+    // 时间取 updated（源文件 mtime 推导），按时间倒序取全部文章
     const docs: SearchDoc[] = Object.entries(postMeta)
-      .map(([id, m]) => ({ id, title: m.title || id, date: m.date || '', tags: m.tags || [] }))
+      .map(([id, m]) => ({ id, title: m.title || id, date: m.updated || '', tags: m.tags || [] }))
       .sort((a, b) => (a.date < b.date ? 1 : -1))
 
     miniSearch = new MiniSearch<SearchDoc>({

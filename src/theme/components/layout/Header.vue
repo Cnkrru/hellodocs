@@ -6,6 +6,7 @@ import Nav from '../Nav.vue'
 import Search from '../Search.vue'
 import Theme from '../Theme.vue'
 import Github from '../icon/Github.vue'
+import PostLocalNav from '../post/PostLocalNav.vue'
 import { toggleSidebarOpen } from '@/composables/sidebar'
 /* 汉堡按钮仅文档页显示：首页/404 没有侧栏，点了没意义；
    离开文档页时顺手收起抽屉，避免遮罩残留 */
@@ -32,6 +33,8 @@ const onToggle = () => {
       </a>
       <Theme />
     </div>
+    <!-- 移动端本地导航条：顶栏第二行，承载「菜单」与「本页目录」（仅文档页，≤768px） -->
+    <PostLocalNav v-if="isPost" />
   </aside>
 </template>
 
@@ -143,7 +146,7 @@ const onToggle = () => {
 }
 
 @media (max-width: 768px) {
-  /* [响应式-sm] 手机：顶栏脱离固定高度允许换行，搜索独占一行 */
+  /* [响应式-sm] 手机：顶栏允许换行，第二行让位给本地导航条（菜单 + 本页目录） */
   .header {
     height: auto;
     min-height: 56px;
@@ -152,9 +155,9 @@ const onToggle = () => {
     padding-bottom: 8px;
   }
 
-  .header :deep(.search-wrap) {
-    order: -1;
-    flex: 1 1 100%;
+  /* 菜单入口交给本地导航条的「菜单」，顶栏不再重复放一个汉堡 */
+  .hamburger {
+    display: none;
   }
 
   .el-list {
