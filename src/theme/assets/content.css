@@ -465,3 +465,592 @@
     padding: 8px 12px;
   }
 }
+
+/* ==================== 写作组件（编译期直出，fence 拦截产物） ==================== */
+
+/* ===== 时间线 timeline ===== */
+.content .timeline {
+  margin: 16px 0;
+  padding-left: 4px;
+  border-left: 2px solid color-mix(in srgb, var(--g-color) 35%, transparent);
+}
+.content .timeline-item {
+  position: relative;
+  padding: 0 0 20px 20px;
+}
+.content .timeline-item:last-child {
+  padding-bottom: 4px;
+}
+.content .timeline-dot {
+  position: absolute;
+  left: -9px;
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--g-color);
+  border: 2px solid var(--g-bg);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--g-color) 35%, transparent);
+}
+.content .timeline-time {
+  font-size: 0.85em;
+  color: color-mix(in srgb, var(--g-text) 60%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.content .timeline-title {
+  font-weight: 600;
+  margin: 2px 0;
+}
+.content .timeline-desc {
+  color: color-mix(in srgb, var(--g-text) 80%, transparent);
+  font-size: 0.95em;
+}
+
+/* ===== 步骤条 steps ===== */
+.content .steps {
+  margin: 16px 0;
+}
+.content .steps-item {
+  display: flex;
+  gap: 14px;
+  padding-bottom: 20px;
+  position: relative;
+}
+.content .steps-item:last-child {
+  padding-bottom: 4px;
+}
+/* 序号圆点之间的连接线 */
+.content .steps-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 30px;
+  bottom: 2px;
+  width: 2px;
+  background: color-mix(in srgb, var(--g-color) 30%, transparent);
+}
+.content .steps-no {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--g-color);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85em;
+  font-weight: 600;
+}
+.content .steps-body {
+  min-width: 0;
+}
+.content .steps-title {
+  font-weight: 600;
+  line-height: 28px;
+}
+.content .steps-desc {
+  color: color-mix(in srgb, var(--g-text) 80%, transparent);
+  font-size: 0.95em;
+  margin-top: 2px;
+}
+
+/* ===== 标签页 tabs（纯 CSS：radio + 兄弟选择器） ===== */
+.content .tabs {
+  margin: 16px 0;
+  border: 1px solid color-mix(in srgb, var(--g-color) 25%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.content .tabs input[type='radio'] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.content .tabs label {
+  display: inline-block;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 0.9em;
+  color: color-mix(in srgb, var(--g-text) 70%, transparent);
+  border-bottom: 2px solid transparent;
+  background: color-mix(in srgb, var(--g-color) 6%, transparent);
+}
+.content .tabs input[type='radio']:checked + label {
+  color: var(--g-color);
+  border-bottom-color: var(--g-color);
+  font-weight: 600;
+}
+.content .tabs-panel {
+  display: none;
+  padding: 16px;
+  white-space: pre-wrap;
+  font-size: 0.95em;
+  border-top: 1px solid color-mix(in srgb, var(--g-color) 20%, transparent);
+}
+/* 面板显隐：label 与 input 在 nav 区相邻，面板靠 data-panel 与 radio id 对应，
+   用 :has() 按选中态点亮对应面板 */
+.content .tabs:has(> input[id$='-0']:checked) > .tabs-panel[data-panel$='-0'],
+.content .tabs:has(> input[id$='-1']:checked) > .tabs-panel[data-panel$='-1'],
+.content .tabs:has(> input[id$='-2']:checked) > .tabs-panel[data-panel$='-2'],
+.content .tabs:has(> input[id$='-3']:checked) > .tabs-panel[data-panel$='-3'],
+.content .tabs:has(> input[id$='-4']:checked) > .tabs-panel[data-panel$='-4'],
+.content .tabs:has(> input[id$='-5']:checked) > .tabs-panel[data-panel$='-5'],
+.content .tabs:has(> input[id$='-6']:checked) > .tabs-panel[data-panel$='-6'],
+.content .tabs:has(> input[id$='-7']:checked) > .tabs-panel[data-panel$='-7'] {
+  display: block;
+}
+
+/* ===== 链接卡片 links ===== */
+.content .linkcards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.content .linkcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 32px 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--g-color) 25%, transparent);
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--g-text);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    transform 0.2s;
+}
+.content a.linkcard:hover {
+  border-color: var(--g-color);
+  box-shadow: 0 2px 12px var(--g-shadow);
+  transform: translateY(-1px);
+}
+.content .linkcard-title {
+  font-weight: 600;
+}
+.content .linkcard-desc {
+  font-size: 0.88em;
+  color: color-mix(in srgb, var(--g-text) 65%, transparent);
+}
+.content .linkcard-arrow {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  color: color-mix(in srgb, var(--g-text) 45%, transparent);
+}
+
+/* ===== 图片画廊 gallery ===== */
+.content .gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.content .gallery-item {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--g-color) 20%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.content .gallery-item img {
+  display: block;
+  width: 100%;
+  margin: 0;
+  cursor: zoom-in;
+}
+.content .gallery-item figcaption {
+  padding: 6px 10px;
+  font-size: 0.85em;
+  color: color-mix(in srgb, var(--g-text) 65%, transparent);
+  background: color-mix(in srgb, var(--g-color) 6%, transparent);
+}
+
+/* ===== 写作组件响应式：窄屏收紧 ===== */
+@media (max-width: 480px) {
+  .content .linkcards,
+  .content .gallery {
+    grid-template-columns: 1fr;
+  }
+  .content .tabs label {
+    padding: 8px 10px;
+    font-size: 0.85em;
+  }
+}
+
+/* ==================== 写作组件 · 第二批 ==================== */
+
+/* ===== 文件树 filetree ===== */
+.content .filetree-box {
+  margin: 16px 0;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--g-color) 25%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--g-color) 4%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  overflow-x: auto;
+}
+.content .filetree-box ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 22px;
+  position: relative;
+}
+/* 层级竖线 */
+.content .filetree-box ul ul::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 0;
+  bottom: 8px;
+  width: 1px;
+  background: color-mix(in srgb, var(--g-text) 25%, transparent);
+}
+.content .filetree-box > ul {
+  padding-left: 0;
+}
+.content .filetree-box li {
+  position: relative;
+  padding: 2px 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+.content .filetree-icon {
+  display: inline-flex;
+  color: color-mix(in srgb, var(--g-text) 60%, transparent);
+  transform: translateY(2px);
+}
+.content .filetree-box li.is-dir > .filetree-icon {
+  color: var(--g-color);
+}
+.content .filetree-box li.is-dir > .filetree-name {
+  font-weight: 600;
+}
+.content .filetree-note {
+  color: color-mix(in srgb, var(--g-text) 50%, transparent);
+  font-size: 0.85em;
+}
+
+/* ===== 终端窗口 terminal ===== */
+.content .terminal {
+  margin: 16px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--g-text) 20%, transparent);
+  background: #1e1e1e;
+}
+.content .terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #2d2d2d;
+}
+.content .terminal-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+.content .terminal-dot.dot-red { background: #ff5f57; }
+.content .terminal-dot.dot-yellow { background: #febc2e; }
+.content .terminal-dot.dot-green { background: #28c840; }
+.content .terminal-title {
+  margin-left: 8px;
+  font-size: 0.78em;
+  color: #999;
+}
+.content .terminal-body {
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  line-height: 1.7;
+  color: #d4d4d4;
+  overflow-x: auto;
+}
+.content .terminal-line {
+  white-space: pre;
+}
+.content .terminal-cmd {
+  color: #ffffff;
+}
+.content .terminal-prompt {
+  color: #28c840;
+  font-weight: 700;
+  user-select: none;
+}
+
+/* ===== 折叠块 details ===== */
+.content .details {
+  margin: 16px 0;
+  border: 1px solid color-mix(in srgb, var(--g-color) 25%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.content .details > summary {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  background: color-mix(in srgb, var(--g-color) 6%, transparent);
+  user-select: none;
+}
+.content .details > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--g-color);
+  transition: transform 0.2s;
+}
+.content .details[open] > summary::before {
+  transform: rotate(90deg);
+}
+.content .details-body {
+  padding: 12px 14px;
+  border-top: 1px solid color-mix(in srgb, var(--g-color) 20%, transparent);
+  white-space: pre-wrap;
+  font-size: 0.95em;
+}
+
+/* ===== 简易流程 flow ===== */
+.content .flow {
+  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.content .flow-node {
+  padding: 10px 20px;
+  border: 1px solid color-mix(in srgb, var(--g-color) 40%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--g-color) 6%, transparent);
+  text-align: center;
+  max-width: 100%;
+}
+.content .flow-text {
+  font-weight: 600;
+}
+.content .flow-sub {
+  font-size: 0.85em;
+  color: color-mix(in srgb, var(--g-text) 60%, transparent);
+  margin-top: 2px;
+}
+.content .flow-arrow {
+  color: var(--g-color);
+  padding: 2px 0;
+  display: flex;
+}
+
+/* ===== 定义块 define ===== */
+.content .define {
+  margin: 16px 0;
+  border-left: 3px solid var(--g-color);
+  padding-left: 16px;
+}
+.content .define-item {
+  margin-bottom: 12px;
+}
+.content .define-item:last-child {
+  margin-bottom: 0;
+}
+.content .define-term {
+  font-weight: 700;
+  color: var(--g-color);
+}
+.content .define-def {
+  margin: 2px 0 0;
+  color: color-mix(in srgb, var(--g-text) 85%, transparent);
+  font-size: 0.95em;
+}
+
+/* ===== 问答块 qa ===== */
+.content .qa {
+  margin: 16px 0;
+}
+.content .qa-item {
+  border: 1px solid color-mix(in srgb, var(--g-color) 25%, transparent);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.content .qa-q {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  user-select: none;
+}
+.content .qa-q::after {
+  content: '点击展开';
+  margin-left: auto;
+  font-size: 0.75em;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--g-text) 45%, transparent);
+}
+.content .qa-item[open] .qa-q::after {
+  content: '收起';
+}
+.content .qa-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--g-color);
+  color: #fff;
+  font-size: 0.72em;
+  font-weight: 700;
+  transform: translateY(2px);
+}
+.content .qa-badge-a {
+  background: color-mix(in srgb, var(--g-color) 55%, transparent);
+}
+.content .qa-a {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px dashed color-mix(in srgb, var(--g-color) 30%, transparent);
+  color: color-mix(in srgb, var(--g-text) 85%, transparent);
+  font-size: 0.95em;
+}
+
+/* ===== 数据卡 stat ===== */
+.content .stat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+.content .stat-item {
+  flex: 1 1 140px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--g-color) 25%, transparent);
+  border-radius: 8px;
+  text-align: center;
+  background: color-mix(in srgb, var(--g-color) 4%, transparent);
+}
+.content .stat-value {
+  font-size: 1.6em;
+  font-weight: 700;
+  color: var(--g-color);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.content .stat-label {
+  font-size: 0.85em;
+  color: color-mix(in srgb, var(--g-text) 60%, transparent);
+  margin-top: 4px;
+}
+
+/* ===== 对比双栏 compare ===== */
+.content .compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0;
+}
+.content .compare-col {
+  border: 1px solid color-mix(in srgb, var(--g-color) 25%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.content .compare-head {
+  padding: 8px 14px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--g-color) 8%, transparent);
+  color: var(--g-color);
+  text-align: center;
+}
+.content .compare-col ul {
+  margin: 0;
+  padding: 10px 14px 10px 32px;
+}
+.content .compare-col li {
+  padding: 3px 0;
+  font-size: 0.95em;
+}
+
+/* ===== 引用卡 quote ===== */
+.content .quote {
+  margin: 16px 0;
+  padding: 14px 18px;
+  border-left: 4px solid var(--g-color);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--g-color) 5%, transparent);
+}
+.content .quote-body {
+  font-size: 1.05em;
+  line-height: 1.8;
+}
+.content .quote-body::before {
+  content: '“';
+  font-size: 1.6em;
+  color: var(--g-color);
+  line-height: 0;
+  margin-right: 4px;
+  vertical-align: -0.3em;
+}
+.content .quote-cite {
+  margin-top: 8px;
+  font-size: 0.88em;
+  color: color-mix(in srgb, var(--g-text) 60%, transparent);
+  text-align: right;
+}
+.content .quote-source {
+  margin-left: 6px;
+  font-style: normal;
+}
+
+/* ===== 行内语法：按键 kbd / 徽章 badge / 高亮 mark ===== */
+.content kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--g-text) 30%, transparent);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--g-text) 5%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82em;
+  line-height: 1.4;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--g-text) 15%, transparent);
+}
+.content .badge {
+  display: inline-block;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--g-color) 15%, transparent);
+  color: var(--g-color);
+  font-size: 0.78em;
+  font-weight: 600;
+  line-height: 1.6;
+  vertical-align: 0.08em;
+}
+.content mark {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, #ffd43b 55%, transparent);
+  color: inherit;
+}
+
+/* ===== 第二批组件响应式 ===== */
+@media (max-width: 480px) {
+  .content .compare {
+    grid-template-columns: 1fr;
+  }
+  .content .stat-item {
+    flex: 1 1 100%;
+  }
+  .content .quote {
+    padding: 10px 12px;
+  }
+}

@@ -3,9 +3,12 @@
 // 由 vite buildStart 调用。
 //
 // 职责边界：编译期只做「md → html」与「解析元数据」两件事。
-// 侧栏树是手写配置 src/theme/config/sidebar.json（结构照 VitePress 的 themeConfig.sidebar），
+// 侧栏树是手写配置 src/config/sidebar.json（结构照 VitePress 的 themeConfig.sidebar），
 // 不再由本脚本扫盘生成 —— 分组与顺序属于内容组织决策，写在配置里比让脚本猜目录名更可控。
-// 由 vite buildStart 调用。
+//
+// 写作组件已插件化（src/build/plugins/）：fence 组件（mermaid/timeline/steps/tabs/links/gallery）
+// 与容器组件（:::tip/info/warn/error 提示块）各自独立成插件，registry.ts 统一登记；
+// 新增组件 = 加一个插件文件 + 在 registry 登记一行，本脚本不再改动。
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -24,7 +27,12 @@ import { tasklist } from '@mdit/plugin-tasklist'
 import { katex } from '@mdit/plugin-katex'
 import { componentPlugin } from '@mdit-vue/plugin-component'
 import { slugify } from '@mdit-vue/shared'
-import { container } from '@mdit/plugin-container'
+import {
+  componentFenceLangs,
+  renderComponentFence,
+  setupComponentPlugins,
+} from './plugins/registry.ts'
+import { toolbar, splitRow } from './plugins/base.ts'
 
 // 上下篇链接：编译期按 sidebar.json 展平顺序推导，首篇无 prev、末篇无 next
 type PostNavLink = {
@@ -61,7 +69,7 @@ const KNOWN_LANGS: ReadonlySet<string> = new Set([
 let highlighter: Highlighter | null = null
 
 // 扫盘最大层级：docs/ 下的第一层目录算第 1 级，超出深度的分支整体不纳入编译
-// （侧栏树已改为手写配置 src/theme/config/sidebar.json，此处只约束正文 SFC 的产出深度）
+// （侧栏树已改为手写配置 src/config/sidebar.json，此处只约束正文 SFC 的产出深度）
 
 // 脚本文件路径 → 项目根路径 → 各产物路径
 const scriptPath = fileURLToPath(import.meta.url)
@@ -92,6 +100,9 @@ const ensureJsonDir = () => {
  *
  * 同样必须掺入 sidebar.json：上下篇是按侧栏展平顺序算的，只改侧栏而 docs/ 未动时，
  * 签名若不变就会短路复用缓存，上下篇永远停在旧顺序
+ *
+ * 组件插件化后还必须掺入 plugins/ 下所有插件文件：只改组件外壳而 docs/ 未动时，
+ * 签名若不变就会短路复用缓存，新组件产物永远不会生效
  */
 const compileSignature = (files: string[]): string => {
   const self = fs.statSync(scriptPath)
@@ -104,9 +115,24 @@ const compileSignature = (files: string[]): string => {
       return '__sidebar__:missing' // 侧栏缺失时也要占位，否则删掉侧栏不触发重编译
     }
   })()
+  const pluginTags = (() => {
+    try {
+      const dir = path.join(dirPath, 'plugins')
+      return fs
+        .readdirSync(dir)
+        .filter((f) => f.endsWith('.ts'))
+        .map((f) => {
+          const s = fs.statSync(path.join(dir, f))
+          return `__plugin_${f}__:${s.mtimeMs}:${s.size}`
+        })
+    } catch {
+      return ['__plugins__:missing']
+    }
+  })()
   return [
     selfTag,
     sidebarTag,
+    ...pluginTags,
     ...files.map((f) => {
       const s = fs.statSync(path.join(articlePath, f))
       return `${f}:${s.mtimeMs}:${s.size}`
@@ -139,69 +165,6 @@ const codeShell = (lang: string, highlighted: string): string => `
     ${highlighted}
 </div>
 `
-
-/*
- * id: mermaidShell
- * fn: mermaid代码块外壳，渲染前是源码文本，由运行时mermaid.run替换为图
- */
-const mermaidShell = (code: string): string => `
-<div class="language-mermaid" v-pre>
-    <div class="code-toolbar">
-        <span class="lang lang-mermaid">
-            <span class="lang-dot"></span>
-            <span class="lang-text">mermaid</span>
-        </span>
-    </div>
-    <pre data-lang="mermaid"><code>${code}</code></pre>
-</div>
-`
-
-/*
- * ====================<提示块外壳模板>====================
- * id: admonitionShellOpen / admonitionShellClose
- * fn: 提示块外壳，编译期把 `:::tip/info/warn/error` 容器内容拼进
- * 标题栏(图标+文字) + 内容区结构，样式由 content.css 按等级配色
- * 语法：`:::type 可选标题` 内容 `:::`（标题省略时用默认文案）
- */
-const ADMONITION_META: Record<string, { icon: string; label: string }> = Object.freeze({
-  tip: { icon: 'asterisk', label: '提示' },
-  info: { icon: 'info', label: '信息' },
-  warn: { icon: 'alert', label: '警告' },
-  error: { icon: 'close', label: '错误' },
-})
-
-const ADMONITION_ICON: Record<string, string> = Object.freeze({
-  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
-  alert:
-    '<path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>',
-  close: '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
-  asterisk: '<path d="M12 4v16"/><path d="M5 8l5.8 3.7 3.6-2.2"/><path d="m11 20 1-6 6-1"/>',
-})
-
-const admonitionShellOpen = (type: string, title: string): string => {
-  const meta = ADMONITION_META[type] || ADMONITION_META.info
-  const t = title || meta.label
-  return (
-    `
-<!-- == admonition ` +
-    type +
-    ` == -->
-<div class="admonition admonition-` +
-    type +
-    `">
-    <div class="admonition-head">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
-    ADMONITION_ICON[meta.icon] +
-    `</svg>
-        <span class="admonition-title">` +
-    t +
-    `</span>
-    </div>
-    <div class="admonition-body">`
-  )
-}
-
-const admonitionShellClose = (): string => `</div></div>`
 
 /*
  * id: mtimeToDate
@@ -380,7 +343,7 @@ const syncSiteConfig = () => {
 
 /*
  * id: configLanguage
- * fn: 遍历md，扫描代码块，每遇到一种语言，集合追加这门，mermaid排除，按需加载
+ * fn: 遍历md，扫描代码块，每遇到一种语言，集合追加这门，组件语言排除，按需加载
  */
 const configLanguage = async (files: string[]) => {
   const langSet = new Set<string>(['text'])
@@ -388,7 +351,8 @@ const configLanguage = async (files: string[]) => {
     const _ = fs.readFileSync(path.join(articlePath, file), 'utf-8')
     for (const i of _.matchAll(/^```([\w+-]+)/gm)) {
       const lang = (i[1] ?? '').toLowerCase()
-      if (lang !== 'mermaid') {
+      // 组件语言名都走 fence 拦截拼外壳，不是真语言，不进 shiki（注册表统一汇总，含 mermaid）
+      if (!componentFenceLangs.has(lang)) {
         langSet.add(lang)
       }
     }
@@ -417,13 +381,18 @@ const initMd = () => {
     .use(anchor, { slugify }) // 支持md'#'标签绑定id
     .use(tasklist) // 支持md的任务列表转HTML
     .use(katex) // 支持KATEX
+  // 行内代码统一带 v-pre：code 内容原样进 SFC 模板，其中的 {{ }} 若不屏蔽会被 Vue 当插值解析，
+  // 轻则内容消失、重则编译报错（文档里展示 Vue 模板语法/徽章语法时必然出现）。围栏代码块外壳自带 v-pre，无需处理
+  md.renderer.rules.code_inline = (tokens, idx, _options, _env, self) =>
+    `<code v-pre${self.renderAttrs(tokens[idx]!)}>${md.utils.escapeHtml(tokens[idx]!.content)}</code>`
 
   return md
 }
 
 /*
  * id: configFence
- * fn: 编译期拦截代码块，将指定代码块转义产物注入自定义HTML模块
+ * fn: 编译期拦截代码块：组件语言交给注册表里的组件插件拼外壳直出 HTML，
+ * 未命中任何组件插件的走 shiki 编译期高亮（运行时无需再处理）
  */
 const configFence = (md: InstanceType<typeof MarkdownIt>) => {
   md.renderer.rules.fence = (tokens, idx) => {
@@ -434,9 +403,13 @@ const configFence = (md: InstanceType<typeof MarkdownIt>) => {
     const lang = (info.split(/\s+/)[0] || 'text').toLowerCase()
     const safe = safeLang(lang)
 
-    if (lang === 'mermaid') {
-      return mermaidShell(md.utils.escapeHtml(token.content))
-    }
+    // 组件插件：mermaid 与写作组件（timeline/steps/tabs/links/gallery 等，注册表统一调度）
+    const componentHtml = renderComponentFence(
+      { escapeHtml: md.utils.escapeHtml, toolbar, splitRow },
+      lang,
+      token.content,
+    )
+    if (componentHtml !== null) return componentHtml
 
     // 编译期高亮：highlighter 由 manager 的 configLanguage 初始化，此处必有值
     let highlighted: string
@@ -450,37 +423,13 @@ const configFence = (md: InstanceType<typeof MarkdownIt>) => {
 }
 
 /*
- * id: configContainer
- * fn: 编译期拦截提示块容器（`:::tip/info/warn/error` 包裹内容）
- * @mdit/plugin-container 用 openRenderer/closeRenderer 分两段：
- * open 出锚点+头部+body开标签，中间内容由 markdown-it 正常渲染，close 收尾
- */
-const configContainer = (md: InstanceType<typeof MarkdownIt>) => {
-  ;['tip', 'info', 'warn', 'error'].forEach((type) => {
-    md.use(container, {
-      name: type,
-      openRenderer(tokens, idx, options, _env, _self) {
-        const token = tokens[idx]!
-        // 标题：`:::info 标题` 取"标题"，缺省为空串（fallback 到默认文案）
-        const raw = token.info.trim().slice(type.length).trim()
-        const title = raw === '' ? '' : raw
-        return admonitionShellOpen(type, title)
-      },
-      closeRenderer() {
-        return admonitionShellClose()
-      },
-    })
-  })
-}
-
-/*
  * id: mdParser
  * fn: 解析md，将md的内容和元数据分别写入对应文件
  */
 const mdParser = (files: string[]) => {
   const md = initMd()
   configFence(md)
-  configContainer(md)
+  setupComponentPlugins(md) // 挂载容器语法的组件插件（:::tip/info/warn/error 提示块）
 
   const articles: Record<string, ArticleMeta> = {}
 
