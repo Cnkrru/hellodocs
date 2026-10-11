@@ -32,13 +32,12 @@ onUnmounted(() => unmount())
 /* 常驻侧栏：sticky 吸在 .main-body 顶部，正文滚动时目录固定在右侧可视区 */
 .toc-sidebar {
   position: sticky;
-  /* 56px = .header 高度，目录 sticky 时停在顶栏下沿而非被顶栏盖住（对齐 PostSidebar 的 top） */
-  top: 56px;
+  /* VitePress 式吸顶：顶栏 56px + 16px 呼吸间距，与左侧栏同一基准 */
+  top: calc(56px + 16px);
   align-self: flex-start;
   flex-shrink: 0;
   width: 220px;
-  /* 减去顶栏与自身 margin-top、上下留白，滚动区恰好占满一屏 */
-  max-height: calc(100vh - 56px - var(--space-sm) - 2 * var(--space-xs));
+  max-height: calc(100vh - 56px - 16px - var(--space-sm));
   overflow-y: auto;
   box-sizing: border-box; /* 无全局 border-box 重置，须显式声明，否则 padding 会把滚动区撑破 max-height */
   /* 上下留白：滚动条不贴容器顶/底边，末项也不被滑块压住 */

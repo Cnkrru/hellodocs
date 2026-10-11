@@ -1,25 +1,47 @@
 <script setup lang="ts">
-import { computed, type Component } from 'vue'
+import { computed, defineAsyncComponent, shallowRef, watch, type Component } from 'vue'
 import { useRoute } from 'vue-router'
 import PostToc from '@/components/post/PostToc.vue'
+import PostTocMobile from '@/components/post/PostTocMobile.vue'
 import PostSidebar from '@/components/post/PostSidebar.vue'
 import Render from '@/components/post/Render.vue'
 import PostNav from '@/components/post/PostNav.vue'
 import PostUpdate from '@/components/post/PostUpdate.vue'
 import PostEdit from '@/components/post/PostEdit.vue'
+import { sidebarOpen, closeSidebar } from '@/composables/sidebar'
+// 仅点文档链接才收起抽屉：分组箭头的展开/折叠操作不收（避免误触关闭）
+const onSidebarClick = (e: MouseEvent) => {
+  if ((e.target as HTMLElement).closest('.sb-link')) closeSidebar()
+}
 const route = useRoute()
 // pathMatch 是可重复参数，嵌套文章的 id 含斜杠（如 guide/install），需拼回完整 id
 const postKey = computed(() => (route.params.pathMatch as string[]).join('/'))
-// id 含子目录 → 产物落 .cache/<子目录>/<id>.vue，glob 必须递归（'**'），单星只匹配一层
-const comps = import.meta.glob<{ default: Component }>('/.cache/**/*.vue', { eager: true })
-const content = computed(() => comps[`/.cache/${postKey.value}.vue`]?.default ?? null)
+/*
+ * 文章内容按路由懒加载：glob 不加 eager，每篇文章是独立 chunk，看哪篇加载哪篇。
+ * 此前 eager: true 会把全部文章（含 KaTeX 海量 MathML 节点）揉进单个 Post 大包（实测 3.3MB），
+ * 每打开一篇文章都要下载并执行全站文章代码，是运行时卡顿的根源。
+ */
+const loaders = import.meta.glob<{ default: Component }>('/.cache/**/*.vue')
+const content = shallowRef<Component | null>(null)
+watch(
+  postKey,
+  (key) => {
+    const loader = loaders[`/.cache/${key}.vue`]
+    content.value = loader ? defineAsyncComponent(loader) : null
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <div class="post">
-    <aside class="post-sidebar"><PostSidebar /></aside>
+    <div class="sidebar-mask" :class="{ show: sidebarOpen }" @click="closeSidebar"></div>
+    <aside class="post-sidebar" :class="{ open: sidebarOpen }" @click="onSidebarClick">
+      <PostSidebar />
+    </aside>
 
     <div class="post-main">
+      <PostTocMobile />
       <Render v-if="content">
         <component :is="content" />
       </Render>
@@ -47,19 +69,20 @@ const content = computed(() => comps[`/.cache/${postKey.value}.vue`]?.default ??
   flex-direction: row;
   align-items: flex-start;
   gap: 32px;
-  padding: 24px 0;
+  /* 顶部留白加大：与吸顶侧栏的 16px 呼吸间距呼应 */
+  padding: 32px 0 24px;
 }
 
-/* ---- 左侧栏：定宽 + sticky 吸在顶栏下方 ---- */
+/* ---- 左侧栏：定宽 + sticky 吸顶（VitePress 式：顶栏高 + 呼吸间距） ---- */
 .post-sidebar {
   flex: 0 0 240px;
   position: sticky;
-  top: 56px;
+  /* 顶栏 56px + 16px 呼吸间距：吸顶后侧栏与顶栏之间留一道缝，不紧贴 */
+  top: calc(56px + 16px);
   align-self: flex-start;
-  max-height: calc(100vh - 56px - 2 * var(--space-xs));
+  max-height: calc(100vh - 56px - 16px - var(--space-sm));
   overflow-y: auto;
-  box-sizing: border-box; /* 无全局 border-box 重置，须显式声明，否则 padding 会把滚动区撑破 max-height */
-  /* 上下留白：滚动条不贴容器顶/底边，末项也不被滑块压住 */
+  box-sizing: border-box;
   padding: var(--space-xs) 0;
 }
 
@@ -92,6 +115,48 @@ const content = computed(() => comps[`/.cache/${postKey.value}.vue`]?.default ??
   gap: var(--space-md);
 }
 
+/* ---- 汉堡按钮：仅移动端显示 ---- */
+.hamburger {
+  display: none;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--g-color) 15%, transparent);
+  border-radius: 5px;
+  background: none;
+  color: color-mix(in srgb, var(--g-text) 55%, transparent);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.hamburger:hover {
+  color: var(--g-color);
+  border-color: var(--g-color);
+  background: color-mix(in srgb, var(--g-color) 8%, transparent);
+}
+.hamburger svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* ---- 侧栏抽屉遮罩 ---- */
+.sidebar-mask {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.sidebar-mask.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* ---- 响应式 ---- */
 @media (max-width: 1280px) {
   /* [响应式-lg] 大屏：三栏间距略收 */
@@ -101,9 +166,32 @@ const content = computed(() => comps[`/.cache/${postKey.value}.vue`]?.default ??
 }
 
 @media (max-width: 1024px) {
-  /* [响应式-md] 平板：收起左栏给右侧目录让位 */
+  /* [响应式-md] 平板：左栏变抽屉，默认移出屏外，.open 时滑入 */
   .post-sidebar {
-    display: none;
+    display: block;
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 200;
+    width: 260px;
+    max-height: none;
+    padding: 72px 16px 24px;
+    background: var(--g-bg);
+    border-right: 1px solid color-mix(in srgb, var(--g-color) 12%, transparent);
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow-y: auto;
+  }
+  .post-sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+  }
+  .hamburger {
+    display: flex;
+  }
+  .sidebar-mask {
+    display: block;
   }
 }
 

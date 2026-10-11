@@ -5,7 +5,7 @@ import { join, relative, resolve, sep } from 'node:path'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import generateSitemap from 'vite-ssg-sitemap'
-import compileArticles from './src/build/parseArticle.ts'
+import compileArticles, { finalizeSignature } from './src/build/parseArticle.ts'
 import { SITE_TITLE, SITE_URL } from './src/config/site.config.ts'
 import 'vite-ssg'
 
@@ -89,6 +89,9 @@ export default defineConfig({
     },
     // 构建完成后：生成 sitemap.xml/robots.txt
     onFinished() {
+      // 编译签名转正：走到这里说明本轮构建（打包+SSG 预渲染）完整成功，
+      // pending 签名才有资格短路下次构建（详见 parseArticle.ts finalizeSignature）
+      finalizeSignature()
       // 404 产物的 head 修正：全站 SEO（useHead）尚未接入，title 仍是 index.html 的静态值。
       // vite-ssg@28 没有 transformHtml 钩子，而 Vite 插件的 closeBundle 早于 SSG 写文件，
       // 故只能放在 onFinished —— 此刻 dist/404.html 已落盘。全站 SEO 接通后本段即可删除。

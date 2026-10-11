@@ -1,13 +1,27 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import Logo from '../Logo.vue'
 import Nav from '../Nav.vue'
 import Search from '../Search.vue'
 import Theme from '../Theme.vue'
 import Github from '../icon/Github.vue'
+import { toggleSidebarOpen } from '@/composables/sidebar'
+/* 汉堡按钮仅文档页显示：首页/404 没有侧栏，点了没意义；
+   离开文档页时顺手收起抽屉，避免遮罩残留 */
+const route = useRoute()
+const isPost = computed(() => route.name === 'post')
+const onToggle = () => {
+  if (!isPost.value) return
+  toggleSidebarOpen()
+}
 </script>
 
 <template>
   <aside class="header">
+    <button v-if="isPost" class="hamburger" aria-label="打开导航菜单" @click="onToggle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
     <Logo />
     <Search />
     <div class="el-list">
@@ -22,6 +36,37 @@ import Github from '../icon/Github.vue'
 </template>
 
 <style scoped>
+/* ---- 汉堡按钮：仅移动端显示（桌面端侧栏常驻，无需抽屉开关） ---- */
+.hamburger {
+  display: none;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--g-color) 15%, transparent);
+  border-radius: 5px;
+  background: none;
+  color: color-mix(in srgb, var(--g-text) 55%, transparent);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.hamburger:hover {
+  color: var(--g-color);
+  border-color: var(--g-color);
+  background: color-mix(in srgb, var(--g-color) 8%, transparent);
+}
+.hamburger svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+@media (max-width: 1024px) {
+  .hamburger {
+    display: flex;
+  }
+}
+
 /* ---- 顶栏：sticky 吸顶，毛玻璃 ---- */
 .header {
   position: sticky;

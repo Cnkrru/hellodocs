@@ -142,3 +142,16 @@ export const sidebarState = () => {
   return { flatNodes, visible, isCollapsed, toggle, indent, treeRef }
 }
 
+/* ====================<移动端抽屉>==================== */
+/*
+ * 移动端侧栏抽屉的共享开关：顶栏汉堡按钮、侧栏本体、遮罩层三处共用。
+ * 模块级 ref 保证跨组件同一实例；桌面端始终显示侧栏，此状态不产生影响。
+ */
+export const sidebarOpen = ref(false)
+export const toggleSidebarOpen = () => {
+  sidebarOpen.value = !sidebarOpen.value
+}
+export const closeSidebar = () => {
+  sidebarOpen.value = false
+}
+

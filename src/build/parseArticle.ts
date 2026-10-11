@@ -437,12 +437,15 @@ const mdParser = (files: string[]) => {
     const id = file.replace(/\.md$/, '') // 把文章名取出来
     const _ = fs.readFileSync(path.join(articlePath, file), 'utf8') // 读取文章内容
 
-    // mtime增量：SFC产物存在且不比源文件旧 → 跳过katex重渲染与重写，直接复用
-    // id 含子目录，产物落 .cache/<子目录>/<id>.vue，写前先建目录
+    // mtime增量：SFC产物存在且不旧于源文件与本编译脚本 → 跳过重渲染，直接复用
+    // 必须比对脚本自身 mtime：脚本逻辑（如渲染规则）变更后，旧 SFC 是按旧逻辑生成的，
+    // mtime 再新也不能复用 —— 此前 v-pre 修复后旧产物被复用导致二次失败，就是这个漏洞
     const sfcPath = path.join(vuePath, `${id}.vue`)
-    const sfcFresh =
+    const sfcMtimeOk =
       fs.existsSync(sfcPath) &&
-      fs.statSync(sfcPath).mtimeMs >= fs.statSync(path.join(articlePath, file)).mtimeMs
+      fs.statSync(sfcPath).mtimeMs >= fs.statSync(path.join(articlePath, file)).mtimeMs &&
+      fs.statSync(sfcPath).mtimeMs >= fs.statSync(scriptPath).mtimeMs
+    const sfcFresh = sfcMtimeOk
 
     if (!sfcFresh) {
       const rendered = md.render(_) // 直接把文章内容转义为HTML（无 frontmatter，全文即正文）
@@ -516,15 +519,18 @@ const manager = async () => {
     ensureJsonDir()
     fs.writeFileSync(jsonPath, '{}', 'utf8')
     syncPostMeta()
-    fs.writeFileSync(path.join(vuePath, '.compile-sig'), compileSignature([]), 'utf8')
+    fs.writeFileSync(path.join(vuePath, '.compile-sig.pending'), compileSignature([]), 'utf8')
     return
   }
-  // 输入签名比对：两次 vite build 乃至无改动重跑都靠磁盘 sidecar 短路复用缓存
+  // 输入签名比对：正式签名（上次构建成功后落盘）与 pending 签名（本轮第一次 buildStart 写入）
+  // 均可触发短路 —— 前者对应无改动重跑，后者对应同一轮构建的第二次 buildStart（客户端+服务端各一次）
   const sig = compileSignature(files)
   const sigFile = path.join(vuePath, '.compile-sig')
+  const pendingFile = path.join(vuePath, '.compile-sig.pending')
+  const readIfExists = (p: string) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '')
   // 产物完整性：post.json 缺失时不短路，否则被删的产物永远不会被重建
   const postJsonExists = fs.existsSync(jsonPath)
-  if (postJsonExists && fs.existsSync(sigFile) && fs.readFileSync(sigFile, 'utf8') === sig) {
+  if (postJsonExists && (readIfExists(sigFile) === sig || readIfExists(pendingFile) === sig)) {
     console.log('[INFO]:输入未变,短路复用.cache编译缓存')
     syncPostMeta() // .cache 被清时补建可 import 副本，保证 SSR 每次构建都读得到
     syncSiteConfig() // 配置产物同样补建：短路分支也要保证 site.json 存在
@@ -540,7 +546,23 @@ const manager = async () => {
   mdParser(files)
   syncPostMeta() // 复制为可 import 的同源副本，供 PostUpdate / search 读元数据
   syncSiteConfig() // 站点配置写进 .cache/site.json，theme 内同步读
-  fs.writeFileSync(sigFile, sig, 'utf8') // 落盘签名，供下次构建短路
+  // 只写 pending：此刻仅是 buildStart 完成，vite 打包与 SSG 渲染尚未发生，构建不算成功。
+  // 正式签名由 vite.config.ts 的 onFinished 调 finalizeSignature 转正；
+  // 本轮中途失败时正式签名保持旧值，下次构建不会短路，全部重来
+  fs.writeFileSync(pendingFile, sig, 'utf8')
+}
+
+/*
+ * id: finalizeSignature
+ * fn: 构建成功后由 vite.config.ts 的 onFinished 调用：pending 签名转正。
+ * 只有完整走完全部构建流程的签名才配短路下次构建（产物与签名同源）
+ */
+export const finalizeSignature = () => {
+  const pendingFile = path.join(vuePath, '.compile-sig.pending')
+  const sigFile = path.join(vuePath, '.compile-sig')
+  if (fs.existsSync(pendingFile)) {
+    fs.copyFileSync(pendingFile, sigFile)
+  }
 }
 
 // 直接运行本文件时编译；作为模块被 vite.config 导入时由 buildStart 调用

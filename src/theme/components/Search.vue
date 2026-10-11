@@ -25,11 +25,70 @@ onUnmounted(() => {
 
 // Esc 关闭面板
 const onKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'Escape') resetSearch()
+  if (e.key === 'Escape') {
+    resetSearch()
+    closePanel()
+  }
+}
+/* ---- 移动端面板开关 ----
+ * 面板挂到 body（Teleport），避免顶栏 overflow/stacking context 裁切；
+ * 打开时锁 body 滚动，关闭时恢复并聚焦输入框
+ */
+import { ref, nextTick } from 'vue'
+const panelOpen = ref(false)
+const overlayInput = ref<HTMLInputElement | null>(null)
+const openPanel = () => {
+  panelOpen.value = true
+  document.body.style.overflow = 'hidden'
+  nextTick(() => overlayInput.value?.focus())
+}
+const closePanel = () => {
+  panelOpen.value = false
+  document.body.style.overflow = ''
+  resetSearch()
+}
+const goAndClose = (id: string) => {
+  go(id)
+  closePanel()
 }
 </script>
 
 <template>
+  <!-- 移动端搜索按钮（行业标准形态）：≤768px 显示，点击展开全屏面板 -->
+  <button class="search-trigger" @click="openPanel" aria-label="搜索">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  </button>
+  <!-- 全屏搜索面板：移动端为全屏覆盖层，桌面端退化为原位展开（不显示按钮） -->
+  <Teleport to="body">
+    <div v-if="panelOpen" class="search-overlay" @click.self="closePanel">
+      <div class="search-overlay-panel">
+        <div class="search-overlay-head">
+          <input
+            ref="overlayInput"
+            type="text"
+            class="search-input"
+            placeholder="搜索文档..."
+            v-model="RefKeyword"
+            @keydown="onKeydown"
+            @keypress.enter="onEnter"
+            aria-label="搜索文档"
+          />
+          <button class="search-overlay-close" @click="closePanel" aria-label="关闭搜索">✕</button>
+        </div>
+        <div class="search-panel open">
+          <div v-if="RefSearchRes.length === 0" class="search-empty">输入关键词搜索文档</div>
+          <ul v-else class="search-results">
+            <li v-for="result in RefSearchRes" :key="result.id">
+              <a class="search-item" @click.prevent="goAndClose(result.id)" href="#">
+                <div class="search-item-title" v-html="searchHl(result.title, RefKeyword)"></div>
+                <div class="search-item-desc" v-html="searchHl(result.date, RefKeyword)"></div>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </Teleport>
   <div class="search-wrap">
     <input
       type="text"
@@ -68,6 +127,107 @@ const onKeydown = (e: KeyboardEvent) => {
 </template>
 
 <style scoped>
+/* ---- 移动端搜索按钮：≤768px 显示，桌面端隐藏（桌面用常驻输入框） ---- */
+.search-trigger {
+    display: none;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--g-color) 15%, transparent);
+    border-radius: 5px;
+    background: none;
+    color: color-mix(in srgb, var(--g-text) 55%, transparent);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+}
+.search-trigger:hover {
+    color: var(--g-color);
+    border-color: var(--g-color);
+    background: color-mix(in srgb, var(--g-color) 8%, transparent);
+}
+.search-trigger svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+}
+
+/* ---- 全屏搜索覆盖层（Teleport 到 body，移动端专属） ---- */
+.search-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 12vh 16px 16px;
+}
+.search-overlay-panel {
+    width: 100%;
+    max-width: 560px;
+    background: var(--g-bg);
+    border: 1px solid color-mix(in srgb, var(--g-color) 15%, transparent);
+    border-radius: 12px;
+    box-shadow: 0 16px 48px var(--g-shadow);
+    overflow: hidden;
+    animation: overlayIn 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes overlayIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.search-overlay-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--g-color) 12%, transparent);
+}
+.search-overlay-head .search-input {
+    flex: 1;
+}
+.search-overlay-close {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: none;
+    color: color-mix(in srgb, var(--g-text) 55%, transparent);
+    cursor: pointer;
+    font-size: 14px;
+    border-radius: 5px;
+    flex-shrink: 0;
+}
+.search-overlay-close:hover {
+    color: var(--g-color);
+    background: color-mix(in srgb, var(--g-color) 12%, transparent);
+}
+/* 覆盖层内的面板：去掉绝对定位，改为文档流 */
+.search-overlay .search-panel {
+    position: static;
+    max-height: 55vh;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    background: none;
+}
+
+/* ---- 断点切换：≤768px 输入框隐藏、按钮显示 ---- */
+@media (max-width: 768px) {
+    .search-trigger {
+        display: flex;
+    }
+    .search-wrap {
+        display: none;
+    }
+}
+
 /* ---- 搜索 ---- */
 .search-wrap {
     position: relative;
