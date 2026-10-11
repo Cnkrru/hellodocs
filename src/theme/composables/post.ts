@@ -352,6 +352,35 @@ export const scrollProgress = (): (() => void) => {
   return () => scroller.removeEventListener('scroll', update)
 }
 
+/* ====================<echarts>==================== */
+/*
+ * ECharts 运行时渲染：与 mermaid 同款按需模式。
+ * 页面无 echarts 块时零开销（echarts 全量约 1MB，不应每篇都背）；
+ * 有块时动态 import，读 code 内的 option JSON 渲染到容器。
+ * 容器高度：option 里可写 "height": 320 自定义（非 echarts 标准字段，渲染前摘出）。
+ */
+export const echarts = async () => {
+  const blocks = document.querySelectorAll('pre[data-lang="echarts"] code')
+  if (!blocks.length) return
+  const { init } = await import('echarts')
+  for (const block of Array.from(blocks)) {
+    const pre = block.closest('pre')
+    if (!pre) continue
+    try {
+      const option = JSON.parse(block.textContent || '{}')
+      // 摘出自定义高度字段（默认 320px），其余原样交给 echarts
+      const height = Number(option.height) || 320
+      delete option.height
+      const chart = init(pre, undefined, { height })
+      chart.setOption(option)
+      // 背景透明：融入明暗主题，不与代码块底色冲突
+      pre.style.background = 'transparent'
+    } catch {
+      console.error('[ERR]:echarts 渲染错误，option JSON 非法')
+    }
+  }
+}
+
 /* ====================<mermaid>==================== */
 export const mermaid = async () => {
   const mermaidCode = document.querySelectorAll('pre[data-lang="mermaid"] code')

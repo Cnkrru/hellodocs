@@ -14,6 +14,8 @@
 import type MarkdownIt from 'markdown-it'
 import type { ComponentPlugin, PluginContext } from './base.ts'
 import { basicBlocks } from './blocks-basic.ts'
+import { echartsBlock } from './echarts.ts'
+import { extraBlocks } from './blocks-extra.ts'
 import { richBlocks } from './blocks-rich.ts'
 import { admonition } from './admonition.ts'
 import { structureBlocks } from './blocks-structure.ts'
@@ -23,6 +25,8 @@ import { inlineMarks } from './inline-marks.ts'
 // 全部组件插件：新增组件在这里登记
 export const componentPlugins: readonly ComponentPlugin[] = [
   basicBlocks,
+  echartsBlock,
+  extraBlocks,
   richBlocks,
   admonition,
   structureBlocks,

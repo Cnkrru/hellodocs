@@ -1076,3 +1076,119 @@
     padding: 10px 12px;
   }
 }
+
+/* ==================== cards 卡片网格 ==================== */
+.content .cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 1em 0;
+}
+.content .card-link {
+  text-decoration: none;
+  color: inherit;
+}
+.content .card-item {
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--g-text) 15%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--g-text) 4%, transparent);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+.content .card-link:hover .card-item,
+.content .card-item:hover {
+  border-color: var(--g-color);
+  box-shadow: 0 2px 12px var(--g-shadow);
+  transform: translateY(-2px);
+}
+.content .card-title {
+  font-weight: 600;
+  color: var(--g-text);
+  margin-bottom: 4px;
+}
+.content .card-desc {
+  font-size: 0.88em;
+  color: color-mix(in srgb, var(--g-text) 70%, transparent);
+  line-height: 1.5;
+}
+
+/* ==================== progress 进度条 ==================== */
+.content .progress {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 1em 0;
+}
+.content .progress-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.content .progress-label {
+  flex: 0 0 auto;
+  min-width: 4.5em;
+  font-size: 0.9em;
+  color: var(--g-text);
+}
+.content .progress-track {
+  flex: 1 1 auto;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--g-text) 12%, transparent);
+  overflow: hidden;
+}
+.content .progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--g-gradient);
+}
+.content .progress-pct {
+  flex: 0 0 auto;
+  min-width: 3.5em;
+  text-align: right;
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--g-text) 70%, transparent);
+}
+
+/* ==================== attrs 属性列表 ==================== */
+.content .attrs {
+  margin: 1em 0;
+  border: 1px solid color-mix(in srgb, var(--g-text) 15%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.content .attrs-row {
+  display: flex;
+  gap: 16px;
+  padding: 9px 14px;
+}
+.content .attrs-row + .attrs-row {
+  border-top: 1px solid color-mix(in srgb, var(--g-text) 10%, transparent);
+}
+.content .attrs-key {
+  flex: 0 0 9em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  color: var(--g-color);
+}
+.content .attrs-val {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.92em;
+  color: var(--g-text);
+}
+
+/* ===== 第三批组件响应式 ===== */
+@media (max-width: 480px) {
+  .content .cards {
+    grid-template-columns: 1fr;
+  }
+  .content .attrs-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .content .attrs-key {
+    flex-basis: auto;
+  }
+}
