@@ -7,6 +7,7 @@ import Render from '@/components/post/Render.vue'
 import PostNav from '@/components/post/PostNav.vue'
 import PostUpdate from '@/components/post/PostUpdate.vue'
 import PostEdit from '@/components/post/PostEdit.vue'
+import { loadContent } from '@/composables/content'
 import { sidebarOpen, closeSidebar } from '@/composables/sidebar'
 // 仅点文档链接才收起抽屉：分组箭头的展开/折叠操作不收（避免误触关闭）
 const onSidebarClick = (e: MouseEvent) => {
@@ -15,17 +16,12 @@ const onSidebarClick = (e: MouseEvent) => {
 const route = useRoute()
 // pathMatch 是可重复参数，嵌套文章的 id 含斜杠（如 guide/install），需拼回完整 id
 const postKey = computed(() => (route.params.pathMatch as string[]).join('/'))
-/*
- * 文章内容按路由懒加载：glob 不加 eager，每篇文章是独立 chunk，看哪篇加载哪篇。
- * 此前 eager: true 会把全部文章（含 KaTeX 海量 MathML 节点）揉进单个 Post 大包（实测 3.3MB），
- * 每打开一篇文章都要下载并执行全站文章代码，是运行时卡顿的根源。
- */
-const loaders = import.meta.glob<{ default: Component }>('/.cache/**/*.vue')
+// 文章正文按 id 懒加载（加载器与预取共用同一出处），每篇文章是独立 chunk，看哪篇加载哪篇
 const content = shallowRef<Component | null>(null)
 watch(
   postKey,
   (key) => {
-    const loader = loaders[`/.cache/${key}.vue`]
+    const loader = loadContent(key)
     content.value = loader ? defineAsyncComponent(loader) : null
   },
   { immediate: true },

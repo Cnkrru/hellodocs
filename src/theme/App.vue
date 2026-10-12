@@ -2,9 +2,13 @@
 import { onMounted } from 'vue'
 import { RouterView } from 'vue-router'
 import { initLD } from '@/composables/ld'
+import { prefetch } from '@/composables/prefetch'
 import Header from './components/layout/Header.vue'
 import Footer from './components/layout/Footer.vue'
 import BackToTop from './components/BackToTop.vue'
+
+// 站内链接预取：空闲时预热视口内文章 chunk，消除 SPA 切换文章时的正文闪烁
+prefetch()
 
 // var.css 靠 body 上的 .light/.dark 挂变量，必须客户端挂载后再定class（SSR 阶段无 localStorage）
 onMounted(() => {
