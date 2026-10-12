@@ -49,6 +49,8 @@ function walkVue(root: string, dir = root): string[] {
     if (entry.isDirectory()) {
       out.push(...walkVue(root, full))
     } else if (entry.name.endsWith('.vue')) {
+      // home.vue 是首页内容源产物（由 Home.vue 经 / 路由渲染），不是文章，跳过以免生成 /post/home 幽灵路由
+      if (relative(root, full).split(sep).join('/') === 'home.vue') continue
       // 相对 root 而非当前层，否则嵌套层级在递归里被吃掉，id 变成扁平的末段名
       out.push(relative(root, full).split(sep).join('/').replace(/\.vue$/, ''))
     }

@@ -162,6 +162,10 @@ const onToggle = () => {
 
   .el-list {
     gap: 12px;
+    /* 整组占满一行换行到顶栏第二行居中：导航在移动端不再隐藏（见 Nav.vue 响应式-sm） */
+    flex: 1 1 100%;
+    order: 2;
+    justify-content: center;
   }
 }
 

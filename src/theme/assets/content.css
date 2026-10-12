@@ -1192,3 +1192,16 @@
     flex-basis: auto;
   }
 }
+
+/* ===== 代码组 code-group（复用 tabs 切换，面板内嵌高亮代码块） ===== */
+.content .tabs.code-group .tabs-panel {
+    padding: 0;
+}
+.content .tabs.code-group .tabs-panel > .language- {
+    display: none;
+}
+.content .tabs.code-group .tabs-panel > div[class*='language-'] {
+    margin: 0;
+    border-radius: 0 0 6px 6px;
+    border-top: none;
+}

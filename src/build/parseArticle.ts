@@ -25,6 +25,11 @@ import {
 import { anchor } from '@mdit/plugin-anchor'
 import { tasklist } from '@mdit/plugin-tasklist'
 import { katex } from '@mdit/plugin-katex'
+import { footnote } from '@mdit/plugin-footnote'
+import { sub } from '@mdit/plugin-sub'
+import { sup } from '@mdit/plugin-sup'
+import { lightEmoji } from '@mdit/plugin-emoji'
+import { ins } from '@mdit/plugin-ins'
 import { componentPlugin } from '@mdit-vue/plugin-component'
 import { slugify } from '@mdit-vue/shared'
 import {
@@ -81,6 +86,9 @@ const jsonPath = path.join(rootPath, 'public/config/post.json')
 const postMetaPath = path.join(vuePath, 'post.json')
 const sidebarPath = path.join(rootPath, 'public/config/sidebar.json')
 const sidebarMetaPath = path.join(vuePath, 'sidebar.json')
+// 首页内容源：src/theme/views/home.md → .cache/home.vue（与文章同一渲染管线，但不进侧栏树与 post.json）
+const homeMdPath = path.join(rootPath, 'src/theme/views/home.md')
+const homeVuePath = path.join(vuePath, 'home.vue')
 
 /*
  * id: ensureJsonDir
@@ -123,9 +131,19 @@ const compileSignature = (files: string[]): string => {
       return ['__plugins__:missing']
     }
   })()
+  // 首页内容源同样掺入签名：home.md 改动后不能被短路缓存挡住，否则新内容永远不生效
+  const homeTag = (() => {
+    try {
+      const s = fs.statSync(homeMdPath)
+      return `__home_md__:${s.mtimeMs}:${s.size}`
+    } catch {
+      return '__home_md__:missing'
+    }
+  })()
   return [
     selfTag,
     ...pluginTags,
+    homeTag,
     ...files.map((f) => {
       const s = fs.statSync(path.join(articlePath, f))
       return `${f}:${s.mtimeMs}:${s.size}`
@@ -349,10 +367,10 @@ const syncSiteConfig = () => {
  * id: configLanguage
  * fn: 遍历md，扫描代码块，每遇到一种语言，集合追加这门，组件语言排除，按需加载
  */
-const configLanguage = async (files: string[]) => {
+const configLanguage = async (absFiles: string[]) => {
   const langSet = new Set<string>(['text'])
-  for (const file of files) {
-    const _ = fs.readFileSync(path.join(articlePath, file), 'utf-8')
+  for (const file of absFiles) {
+    const _ = fs.readFileSync(file, 'utf-8')
     for (const i of _.matchAll(/^```([\w+-]+)/gm)) {
       const lang = (i[1] ?? '').toLowerCase()
       // 组件语言名都走 fence 拦截拼外壳，不是真语言，不进 shiki（注册表统一汇总，含 mermaid）
@@ -385,6 +403,11 @@ const initMd = () => {
     .use(anchor, { slugify }) // 支持md'#'标签绑定id
     .use(tasklist) // 支持md的任务列表转HTML
     .use(katex) // 支持KATEX
+    .use(footnote) // 支持脚注 [^1]（GFM/Pandoc/Obsidian 标准语法）
+    .use(sub) // 支持下标 H~2~O（Pandoc 语法）
+    .use(sup) // 支持上标 x^2^（Pandoc 语法）
+    .use(lightEmoji) // 支持 emoji 短代码 :tada:（GFM 标准，轻量版渲染为 Unicode 字符）
+    .use(ins) // 支持插入标记 ++新增++（Pandoc 语法；删除线 ~~xx~~ GFM 已内置）
   // 行内代码统一带 v-pre：code 内容原样进 SFC 模板，其中的 {{ }} 若不屏蔽会被 Vue 当插值解析，
   // 轻则内容消失、重则编译报错（文档里展示 Vue 模板语法/徽章语法时必然出现）。围栏代码块外壳自带 v-pre，无需处理
   md.renderer.rules.code_inline = (tokens, idx, _options, _env, self) =>
@@ -408,8 +431,20 @@ const configFence = (md: InstanceType<typeof MarkdownIt>) => {
     const safe = safeLang(lang)
 
     // 组件插件：mermaid 与写作组件（timeline/steps/tabs/links/gallery 等，注册表统一调度）
+    // highlight：code-group 等内嵌代码的组件用，编译期 shiki 高亮；未知语言回退纯文本
     const componentHtml = renderComponentFence(
-      { escapeHtml: md.utils.escapeHtml, toolbar, splitRow },
+      {
+        escapeHtml: md.utils.escapeHtml,
+        toolbar,
+        splitRow,
+        highlight: (code: string, lang: string): string => {
+          try {
+            return highlighter!.codeToHtml(code, { lang, theme: highlightTheme })
+          } catch {
+            return highlighter!.codeToHtml(code, { lang: 'text', theme: highlightTheme })
+          }
+        },
+      },
       lang,
       token.content,
     )
@@ -523,6 +558,27 @@ const flattenSidebar = (nodes: SidebarNode[]): { id: string; title: string; link
 }
 
 /*
+ * id: compileHome
+ * fn: 首页内容源 src/theme/views/home.md → .cache/home.vue，与文章同一渲染管线，
+ *     但不进侧栏树与 post.json（首页不是文章）。源文件不存在时清掉过时产物。
+ *     mtime 增量与文章 SFC 同规则：产物不旧于源文件与本脚本则跳过重渲染
+ */
+const compileHome = (md: InstanceType<typeof MarkdownIt>) => {
+  if (!fs.existsSync(homeMdPath)) {
+    if (fs.existsSync(homeVuePath)) fs.rmSync(homeVuePath)
+    return
+  }
+  const fresh =
+    fs.existsSync(homeVuePath) &&
+    fs.statSync(homeVuePath).mtimeMs >= fs.statSync(homeMdPath).mtimeMs &&
+    fs.statSync(homeVuePath).mtimeMs >= fs.statSync(scriptPath).mtimeMs
+  if (fresh) return
+  const rendered = md.render(fs.readFileSync(homeMdPath, 'utf8'))
+  fs.writeFileSync(homeVuePath, `<template>${rendered}</template>`, 'utf8')
+  console.log('[INFO]:首页内容源已渲染为 .cache/home.vue')
+}
+
+/*
  * id: mdParser
  * fn: 解析md，将md的内容和元数据分别写入对应文件
  */
@@ -530,6 +586,7 @@ const mdParser = (files: string[]) => {
   const md = initMd()
   configFence(md)
   setupComponentPlugins(md) // 挂载容器语法的组件插件（:::tip/info/warn/error 提示块）
+  compileHome(md) // 首页内容源同管线渲染，但不进侧栏树与 post.json
 
   const articles: Record<string, ArticleMeta> = {}
 
@@ -599,7 +656,15 @@ const manager = async () => {
   // 空文章目录：走"全清"分支。直接 return 会留下已删文章的过时 SFC 和 post.json 残留，
   // 下游 includedRoutes 会照着这些幽灵产物预渲染出已不存在的文章页
   if (files.length === 0) {
-    vuePathChecker(new Set())
+    // 空文档目录也要渲染首页内容源（若存在）：home.md 不依赖 docs/ 的文章
+    vuePathChecker(new Set(fs.existsSync(homeMdPath) ? ['home'] : []))
+    if (fs.existsSync(homeMdPath)) {
+      await configLanguage([homeMdPath])
+      const md = initMd()
+      configFence(md)
+      setupComponentPlugins(md)
+      compileHome(md)
+    }
     ensureJsonDir()
     fs.writeFileSync(jsonPath, '{}', 'utf8')
     fs.writeFileSync(sidebarPath, '[]', 'utf8')
@@ -624,11 +689,15 @@ const manager = async () => {
     return
   }
   // 2. 检查缓存与元数据文件路径（清除已删除文章的过时产物）
+  // home 产物不在文章扫盘范围：home.md 存在时显式保留，避免被当过时产物清掉
   const ids = new Set(files.map((f) => f.replace(/\.md$/, '')))
+  if (fs.existsSync(homeMdPath)) ids.add('home')
   vuePathChecker(ids)
   jsonPathChecker()
-  // 3. 初始化 shiki 高亮器（扫描文档中用到的语言，按需加载）
-  await configLanguage(files)
+  // 3. 初始化 shiki 高亮器（扫描文档中用到的语言，按需加载；首页内容源一并扫描）
+  const langFiles = files.map((f) => path.join(articlePath, f))
+  if (fs.existsSync(homeMdPath)) langFiles.push(homeMdPath)
+  await configLanguage(langFiles)
   // 4. 配置markdown-it并编译文章（编译期完成 shiki 高亮，运行时无需再处理）
   mdParser(files)
   syncPostMeta() // 复制为可 import 的同源副本，供 PostUpdate / search 读元数据

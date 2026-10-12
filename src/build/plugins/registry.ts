@@ -18,6 +18,7 @@ import { echartsBlock } from './echarts.ts'
 import { extraBlocks } from './blocks-extra.ts'
 import { richBlocks } from './blocks-rich.ts'
 import { admonition } from './admonition.ts'
+import { codeGroupBlock } from './code-group.ts'
 import { structureBlocks } from './blocks-structure.ts'
 import { notesBlocks } from './blocks-notes.ts'
 import { inlineMarks } from './inline-marks.ts'
@@ -29,6 +30,7 @@ export const componentPlugins: readonly ComponentPlugin[] = [
   extraBlocks,
   richBlocks,
   admonition,
+  codeGroupBlock,
   structureBlocks,
   notesBlocks,
   inlineMarks,

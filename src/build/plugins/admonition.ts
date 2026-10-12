@@ -13,6 +13,7 @@
  */
 import type MarkdownIt from 'markdown-it'
 import { container } from '@mdit/plugin-container'
+import { alert } from '@mdit/plugin-alert'
 import type { ComponentPlugin } from './base.ts'
 
 // 等级 → 图标键 + 默认文案
@@ -47,6 +48,21 @@ const shellOpen = (type: string, title: string): string => {
 
 const shellClose = (): string => `</div></div>`
 
+/*
+ * GFM Alerts 别名（GitHub 官方标准）：
+ *   > [!NOTE] 可选标题
+ *   > 内容
+ * 与 :::tip 同一渲染出口（复用外壳与样式），写法与 GitHub README 完全一致。
+ * 等级映射：note→info、tip→tip、important/warning→warn、caution→error
+ */
+const GFM_ALERT_MAP: Record<string, string> = Object.freeze({
+  note: 'info',
+  tip: 'tip',
+  important: 'warn',
+  warning: 'warn',
+  caution: 'error',
+})
+
 export const admonition: ComponentPlugin = {
   name: 'admonition',
   fenceLangs: [], // 容器语法，不走 fence 拦截
@@ -66,5 +82,21 @@ export const admonition: ComponentPlugin = {
         },
       })
     }
+    // GFM Alerts 别名：> [!NOTE] 等引用块语法，映射到同一套外壳
+    md.use(alert, {
+      alertNames: ['note', 'tip', 'important', 'warning', 'caution'],
+      openRenderer(tokens, idx) {
+        const token = tokens[idx]!
+        // info 形如『[!NOTE] 可选标题』：取等级名与剩余标题
+        const raw = token.info.trim()
+        const m = /^\[!\s*(\w+)\s*\]?\s*(.*)$/i.exec(raw)
+        const name = (m?.[1] ?? 'note').toLowerCase()
+        const type = GFM_ALERT_MAP[name] ?? 'info'
+        return shellOpen(type, m?.[2] ?? '')
+      },
+      closeRenderer() {
+        return shellClose()
+      },
+    })
   },
 }

@@ -40,6 +40,8 @@ export interface PluginContext {
   escapeHtml: (s: string) => string
   toolbar: typeof toolbar
   splitRow: typeof splitRow
+  /** shiki 编译期高亮单段代码（code-group 等内嵌代码的组件用）；未提供时组件自行降级 */
+  highlight?: (code: string, lang: string) => string
 }
 
 /*
