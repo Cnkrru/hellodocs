@@ -27,7 +27,7 @@ const encodePath = (p: string) =>
     .join('/')
 
 /** 在 GitHub 上编辑本页：/edit/{branch}/{path} */
-export const repoEditUrl = (postKey: string) =>
+const repoEditUrl = (postKey: string) =>
   hasRepo() && postKey
     ? `https://github.com/${site.SITE_REPO}/edit/${site.SITE_REPO_BRANCH}/${encodePath(srcPath(postKey))}`
     : ''

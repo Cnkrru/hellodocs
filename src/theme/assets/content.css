@@ -692,8 +692,11 @@
 /* ==================== 写作组件 · 第二批 ==================== */
 
 /* ===== 文件树 filetree ===== */
-/* 行业标准树形组件：代码块底色容器 + 完整引导线（拐角 ├─ 效果）+ 图标/文字对齐 */
+/* 标准树形组件：代码块底色容器 + 逐层缩进 + ├/└ 引导线 + 图标/文字对齐 */
 .content .filetree-box {
+  /* 引导线颜色与行锚点：--ft-row 为条目首行中线（1px 上内边距 + 半个行高） */
+  --ft-line: color-mix(in srgb, var(--g-text) 22%, transparent);
+  --ft-row: calc(1px + 0.85em);
   margin: 16px 0;
   padding: 12px 16px;
   border: 1px solid color-mix(in srgb, var(--g-text) 18%, transparent);
@@ -707,39 +710,49 @@
 .content .filetree-box ul {
   list-style: none;
   margin: 0;
-  padding-left: 24px;
-  position: relative;
-}
-.content .filetree-box > ul {
   padding-left: 0;
 }
-/* 每层引导线：竖线贯通整层 */
-.content .filetree-box ul ul::before {
-  content: '';
-  position: absolute;
-  left: 8px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: color-mix(in srgb, var(--g-text) 22%, transparent);
-}
+/* 条目：flex 行 + 允许换行；子树由 li > ul 整宽换到下方，形成纵向层级
+   （li 是 flex 容器，不换行时子树会被当同一行的 flex 项横向铺开） */
 .content .filetree-box li {
   position: relative;
   padding: 1px 0;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
   white-space: nowrap;
 }
-/* 每条目的引导横线：与层竖线相连形成拐角 */
+.content .filetree-box li > ul {
+  flex: 0 0 100%;
+}
+/* 子层级：左侧留出引导线空间，逐层缩进 20px */
+.content .filetree-box ul ul > li {
+  padding-left: 20px;
+}
+/* 竖向主干：非末项贯通到下一同级（跨过其自身子树），末项只画到首行中线，收成 └ */
 .content .filetree-box ul ul > li::before {
   content: '';
   position: absolute;
-  left: -16px;
-  top: 50%;
-  width: 12px;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--ft-line);
+}
+.content .filetree-box ul ul > li:last-child::before {
+  bottom: auto;
+  height: var(--ft-row);
+}
+/* 横向分支：从主干连向条目首行中线，形成 ├/└ 拐角 */
+.content .filetree-box ul ul > li::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: var(--ft-row);
+  width: 20px;
   height: 1px;
-  background: color-mix(in srgb, var(--g-text) 22%, transparent);
+  background: var(--ft-line);
 }
 .content .filetree-icon {
   display: inline-flex;

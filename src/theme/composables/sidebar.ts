@@ -32,13 +32,10 @@ const sidebarTree: SidebarNode[] = sidebarMap['/.cache/sidebar.json'] ?? []
 const hasItems = (node: SidebarNode): boolean => Array.isArray(node.items) && node.items!.length > 0
 
 /*
- * 展平：一次 DFS 同时产出两张表 ——
+ * 展平：一次 DFS 产出带层级信息的全量节点表（分组 + 叶子）
  *
- * flatNodes  带层级信息的全量节点表（分组 + 叶子），侧栏按它渲染，靠 depth 做缩进、ancestors 判可见性
- * flatPosts  只含有 link 的节点的有序表（首页「快速开始」与「最近更新」按它取序列）
- *
- * 两张表顺序一致（都是 DFS），故顺序即编译期派生树的顺序，
- * 不需要 frontmatter 里那个至今无人填写的 order 字段
+ * 侧栏按它渲染，靠 depth 做缩进、ancestors 判可见性；
+ * 顺序即编译期派生树的顺序（DFS），不需要 frontmatter 里那个至今无人填写的 order 字段
  *
  * 展平而非运行时递归搜树，是因为「当前文章落在哪个分组」要靠 ancestors 反查，
  * 记下来是 O(1) 查表；每次渲染递归搜则是 O(n×depth)
@@ -56,18 +53,13 @@ export type FlatNode = {
   ancestors: string[]
 }
 
-export type FlatPost = { id: string; title: string; link: string }
-
 const nodesOut: FlatNode[] = []
-const postsOut: FlatPost[] = []
 
 const walk = (nodes: SidebarNode[], depth: number, ancestors: string[]): void => {
   for (const node of nodes) {
     const key = `${ancestors[ancestors.length - 1] ?? ''}/${node.text}`
     const isFolder = hasItems(node)
     nodesOut.push({ key, text: node.text, link: node.link, depth, isFolder, ancestors })
-    // id 取 link 去掉 /post/ 前缀 —— 与 .cache/<id>.vue 的 id、route.params.pathMatch 同一套键
-    if (node.link) postsOut.push({ id: node.link.replace(/^\/post\//, ''), title: node.text, link: node.link })
     if (isFolder) walk(node.items!, depth + 1, [...ancestors, key])
   }
 }
@@ -77,16 +69,13 @@ walk(sidebarTree, 0, [])
 /** 侧栏全量节点的深度优先扁平表（模块级单例，只算一次） */
 export const flatNodes: readonly FlatNode[] = nodesOut
 
-/** 全站文章的有序扁平表（模块级单例） */
-export const flatPosts: readonly FlatPost[] = postsOut
-
 /**
  * 当前文章所在分支的分组 key 集合：祖先链 + 自身（若自身是分组，点索引页时也该看到它的子项）
  *
  * 这批分组默认展开、其余默认折叠 —— 同 VSCode 的 explorer.autoReveal：
  * 默认全收起，切到哪个文件就展开到哪个文件
  */
-export const activeBranchOf = (currentPath: string): Set<string> => {
+const activeBranchOf = (currentPath: string): Set<string> => {
   // route.path 里的非 ASCII 是百分号编码的（/post/%E7%A1%AC%E4%BB%B6/…），
   // 而树里的 link 是原始中文，须先解码再比对，否则中文文档永远找不到所在分支
   const decodedPath = decodeURIComponent(currentPath)

@@ -21,8 +21,8 @@ export const structureBlocks: ComponentPlugin = {
     const esc = ctx.escapeHtml
 
     /*
-     * filetree：缩进（2 空格或 tab 一级）表达层级，行尾 / 表示目录
-     * 行格式『路径 | 可选注释』，产物为嵌套 ul/li，树线由 CSS 绘制
+     * filetree：围栏内复用 Markdown 无序列表写法（- / * / +），层级由列表缩进表达，行尾 / 表示目录
+     * 行格式『- 名称 | 可选注释』，产物为嵌套 ul/li，树线由 CSS 绘制
      */
     if (lang === 'filetree') {
       const lines = content.split('\n').filter((l) => l.trim().length > 0)
@@ -33,7 +33,8 @@ export const structureBlocks: ComponentPlugin = {
       for (const line of lines) {
         const raw = line.replace(/\t/g, '  ')
         const indent = raw.length - raw.trimStart().length
-        const [name = '', note = ''] = ctx.splitRow(raw.trim())
+        // 剥掉行首的列表标记，其余按缩进判层；不写标记的旧写法仍可用
+        const [name = '', note = ''] = ctx.splitRow(raw.trim().replace(/^[-*+]\s+/, ''))
         const isDir = name.endsWith('/')
         const label = isDir ? name.slice(0, -1) : name
         if (depth === 0) {

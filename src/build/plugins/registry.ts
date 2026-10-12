@@ -24,7 +24,7 @@ import { notesBlocks } from './blocks-notes.ts'
 import { inlineMarks } from './inline-marks.ts'
 
 // 全部组件插件：新增组件在这里登记
-export const componentPlugins: readonly ComponentPlugin[] = [
+const componentPlugins: readonly ComponentPlugin[] = [
   basicBlocks,
   echartsBlock,
   extraBlocks,

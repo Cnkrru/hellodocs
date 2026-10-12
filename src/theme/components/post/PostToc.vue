@@ -13,16 +13,17 @@ onUnmounted(() => unmount())
         <span>目录</span>
       </div>
       <div class="toc-list">
-        <p
+        <button
           v-for="h in headings"
           :key="h.id"
+          type="button"
           class="toc-item"
           :class="{ 'toc-item-on': active === h.id }"
           :style="{ paddingLeft: 6 + (h.level - 1) * 12 + 'px' }"
           @click="jump(h.id)"
         >
           {{ h.text }}
-        </p>
+        </button>
       </div>
     </div>
   </aside>
@@ -67,12 +68,19 @@ onUnmounted(() => unmount())
 }
 
 .toc-item {
+  /* 按钮重置：原生 <button> 自带边框/底色/居中，不重置会破坏原 <p> 的视觉 */
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-left: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+
   margin: 1px 0;
   padding: 4px var(--space-sm);
-  font-size: 13px;
   line-height: 1.5;
   color: var(--g-text);
-  border-left: 2px solid transparent;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

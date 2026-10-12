@@ -88,7 +88,7 @@ const assembler = (key: string) => {
 }
 
 // 结果清空
-export const clearRes = () => {
+const clearRes = () => {
   RefSearchRes.value = []
 }
 

@@ -1,20 +1,23 @@
 {
   "extends": "@vue/tsconfig/tsconfig.dom.json",
-  // src/build 是 Node 侧编译期脚本（用 node:fs/process），归 tsconfig.node.json 管，
-  // 留在这里会因 DOM 配置没有 node types 报 TS2591
+  // src/build 是 Node 侧编译期脚本，src/cli 是 Node 侧 CLI，src/config 是两者的配置契约，
+  // 三者都归 tsconfig.node.json 管；留在这里会因 DOM 配置没有 node types 报 TS2591
   "include": ["env.d.ts", "src/**/*", "src/**/*.vue"],
-  "exclude": ["src/**/__tests__/*", "src/build/**/*"],
+  "exclude": [
+    "src/**/__tests__/*",
+    "src/build/**/*",
+    "src/cli/**/*",
+    "src/config/**/*"
+  ],
   "compilerOptions": {
     // Extra safety for array and object lookups, but may have false positives.
     "noUncheckedIndexedAccess": true,
 
     // Path mapping for cleaner imports.
-    // 必须与 vite.config.ts 的 resolve.alias 完全一致，否则 vue-tsc 解析不到模块
-    // @ → src/theme（theme 内是完整 Vue 框架，内部引用不带 theme 前缀）
-    // @config → src/config（编译期输入配置，theme 内经此别名引用）
+    // 必须与引擎 vite 配置（src/cli/vite.config.ts）的 resolve.alias 完全一致，
+    // 否则 vue-tsc 解析不到模块：@ → src/theme（theme 内是完整 Vue 框架，内部引用不带 theme 前缀）
     "paths": {
-      "@/*": ["./src/theme/*"],
-      "@config/*": ["./src/config/*"]
+      "@/*": ["./src/theme/*"]
     },
 
     // `vue-tsc --build` produces a .tsbuildinfo file for incremental type-checking.

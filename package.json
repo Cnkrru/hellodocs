@@ -1,13 +1,44 @@
 {
   "name": "krudoc",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "基于 Vue 3 + Vite 的静态文档站生成器：docs/ 目录即站点，编译期直出静态 HTML",
+  "keywords": [
+    "krudoc",
+    "ssg",
+    "static-site-generator",
+    "docs",
+    "documentation",
+    "markdown",
+    "vue",
+    "vite"
+  ],
+  "license": "MIT",
+  "author": "Cnkrru <J19323850@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cnkrru/KruDocs.git"
+  },
   "type": "module",
+  "bin": {
+    "krudoc": "bin/krudoc.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "index.html"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/cli/index.ts",
+      "default": "./src/cli/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
   "scripts": {
-    "dev": "vite",
+    "dev": "node ./bin/krudoc.mjs dev",
     "build": "run-p type-check \"build-only {@}\" --",
-    "preview": "vite preview",
-    "build-only": "vite-ssg build",
+    "preview": "node ./bin/krudoc.mjs preview",
+    "build-only": "node ./bin/krudoc.mjs build",
     "type-check": "vue-tsc --build",
     "lint": "run-s \"lint:*\"",
     "lint:oxlint": "oxlint . --fix",
@@ -15,15 +46,6 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
-    "@unhead/vue": "^3.4.2",
-    "echarts": "^6.1.0",
-    "medium-zoom": "^1.1.0",
-    "mermaid": "^11.17.2",
-    "minisearch": "^7.2.0",
-    "vue": "^3.5.42",
-    "vue-router": "^5.3.1"
-  },
-  "devDependencies": {
     "@mdit-vue/plugin-component": "^3.0.2",
     "@mdit-vue/shared": "^3.0.2",
     "@mdit/plugin-alert": "^2.0.2",
@@ -36,30 +58,37 @@
     "@mdit/plugin-sub": "^1.1.2",
     "@mdit/plugin-sup": "^1.1.2",
     "@mdit/plugin-tasklist": "^1.1.3",
+    "@unhead/vue": "^3.4.2",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/server-renderer": "^3.5.43",
+    "beasties": "^0.3.5",
+    "echarts": "^6.1.0",
+    "jiti": "^2.7.0",
+    "katex": "^0.18.10",
+    "markdown-it": "^15.0.2",
+    "medium-zoom": "^1.1.0",
+    "mermaid": "^11.17.2",
+    "minisearch": "^7.2.0",
+    "shiki": "^4.5.0",
+    "vite": "^8.2.2",
+    "vite-ssg": "^28.3.0",
+    "vite-ssg-sitemap": "^0.10.0",
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.1"
+  },
+  "devDependencies": {
     "@tsconfig/node24": "^24.0.5",
     "@types/node": "^24.13.4",
-    "@vitejs/plugin-vue": "^6.0.8",
     "@vue/eslint-config-typescript": "^14.9.0",
-    "@vue/server-renderer": "^3.5.43",
     "@vue/tsconfig": "^0.9.1",
-    "beasties": "^0.3.5",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-oxlint": "~1.82.0",
     "eslint-plugin-vue": "~10.11.0",
-    "gray-matter": "^4.0.3",
-    "jiti": "^2.7.0",
-    "katex": "^0.18.10",
-    "markdown-it": "^15.0.2",
     "npm-run-all2": "^9.0.3",
     "oxlint": "~1.82.0",
     "prettier": "3.9.6",
-    "shiki": "^4.5.0",
     "typescript": "~6.0.0",
-    "vite": "^8.2.2",
-    "vite-plugin-vue-devtools": "^8.2.1",
-    "vite-ssg": "^28.3.0",
-    "vite-ssg-sitemap": "^0.10.0",
     "vue-eslint-parser": "^10.4.1",
     "vue-tsc": "^3.3.11"
   },

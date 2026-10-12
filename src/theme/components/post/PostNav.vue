@@ -11,20 +11,20 @@ const { pre, next } = postNeighbor()
       <div class="post-label">上一篇</div>
       <div class="post-title">{{ pre.title }}</div>
     </router-link>
-    <a v-else class="post-btn pre-post">
+    <span v-else class="post-btn pre-post is-disabled">
       <div class="post-label">上一篇</div>
       <div class="post-title">已是第一篇</div>
-    </a>
+    </span>
 
     <!-- 下一篇的按钮 -->
     <router-link v-if="next" :to="next.link" class="post-btn next-post">
       <div class="post-label">下一篇</div>
       <div class="post-title">{{ next.title }}</div>
     </router-link>
-    <a v-else class="post-btn next-post">
+    <span v-else class="post-btn next-post is-disabled">
       <div class="post-label">下一篇</div>
       <div class="post-title">已是最后一篇</div>
-    </a>
+    </span>
   </div>
 </template>
 
@@ -41,6 +41,7 @@ const { pre, next } = postNeighbor()
 }
 
 .post-btn {
+  box-sizing: border-box;
   width: 50%;
   height: fit-content;
 
@@ -64,11 +65,11 @@ const { pre, next } = postNeighbor()
 }
 
 /* 无链接的占位按钮（已是第一篇/最后一篇）降低视觉权重 */
-a.post-btn:not([href]) {
+.post-btn.is-disabled {
   opacity: 0.4;
   cursor: default;
 }
-a.post-btn:not([href]):hover {
+.post-btn.is-disabled:hover {
   border-color: color-mix(in srgb, var(--g-color) 15%, transparent);
   background: color-mix(in srgb, var(--g-bg) 50%, transparent);
 }

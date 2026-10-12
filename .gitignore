@@ -41,8 +41,6 @@ __screenshots__/
 # vite-ssg 预渲染临时目录（构建结束自动清理，留此规则防中断残留）
 .vite-ssg-temp/
 
-# md 编译中间产物（.build 脚本生成的 SFC / 元数据缓存）
-.cache/
+# krudoc 生成物：Vite root 与全部编译/构建中间产物都落在这里
+.krudoc/
 # docs/ 是站点正文，属于内容资产，必须入库 —— 之前被忽略导致 clone 下来是空站
-# 编译产物：post.json 由编译期脚本生成，不进仓库
-public/config/

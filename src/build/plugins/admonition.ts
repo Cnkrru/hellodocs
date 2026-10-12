@@ -33,9 +33,10 @@ const ADMONITION_ICON: Record<string, string> = Object.freeze({
   asterisk: '<path d="M12 4v16"/><path d="M5 8l5.8 3.7 3.6-2.2"/><path d="m11 20 1-6 6-1"/>',
 })
 
-const shellOpen = (type: string, title: string): string => {
+const shellOpen = (type: string, title: string, esc: (s: string) => string): string => {
   const meta = ADMONITION_META[type] || ADMONITION_META.info
-  const t = title || meta.label
+  // 标题来自文档正文，必须转义后再进 HTML：否则「:::tip <img onerror=...>」可注入
+  const t = title ? esc(title) : meta.label
   return `
 <!-- == admonition ${type} == -->
 <div class="admonition admonition-${type}">
@@ -68,6 +69,7 @@ export const admonition: ComponentPlugin = {
   fenceLangs: [], // 容器语法，不走 fence 拦截
 
   setup(md: InstanceType<typeof MarkdownIt>) {
+    const esc = md.utils.escapeHtml
     for (const type of ['tip', 'info', 'warn', 'error']) {
       md.use(container, {
         name: type,
@@ -75,7 +77,7 @@ export const admonition: ComponentPlugin = {
           const token = tokens[idx]!
           // 标题：`:::info 标题` 取『标题』，缺省为空串（fallback 到默认文案）
           const raw = token.info.trim().slice(type.length).trim()
-          return shellOpen(type, raw)
+          return shellOpen(type, raw, esc)
         },
         closeRenderer() {
           return shellClose()
@@ -92,7 +94,7 @@ export const admonition: ComponentPlugin = {
         const m = /^\[!\s*(\w+)\s*\]?\s*(.*)$/i.exec(raw)
         const name = (m?.[1] ?? 'note').toLowerCase()
         const type = GFM_ALERT_MAP[name] ?? 'info'
-        return shellOpen(type, m?.[2] ?? '')
+        return shellOpen(type, m?.[2] ?? '', esc)
       },
       closeRenderer() {
         return shellClose()

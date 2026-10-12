@@ -55,15 +55,16 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
     </button>
 
     <nav v-if="tocOpen" class="ln-panel">
-      <p
+      <button
         v-for="h in headings"
         :key="h.id"
+        type="button"
         class="ln-item"
         :style="{ paddingLeft: 12 + (h.level - 1) * 14 + 'px' }"
         @click="onJump(h.id)"
       >
         {{ h.text }}
-      </p>
+      </button>
     </nav>
   </div>
 </template>
@@ -147,9 +148,16 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   }
 
   .ln-item {
+    /* 按钮重置：原生 <button> 自带边框/底色/居中，不重置会破坏原 <p> 的视觉 */
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: none;
+    font: inherit;
+    font-size: 13px;
+
     margin: 1px 0;
     padding: 6px var(--space-sm);
-    font-size: 13px;
     line-height: 1.5;
     color: color-mix(in srgb, var(--g-text) 72%, transparent);
     border-radius: var(--radius-sm);

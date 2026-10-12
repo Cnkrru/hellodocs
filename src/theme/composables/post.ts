@@ -3,74 +3,6 @@ import { useRoute } from 'vue-router'
 // 仅取类型：medium-zoom 本体是运行时按需 import 的（见 imageZoom），
 // 类型导入在编译期被擦除，不会把库打进主包
 import type { Zoom } from 'medium-zoom'
-/* ====================<postData>==================== */
-type PostMeta = {
-  order: number
-  title: string
-  date: string
-  updated: string
-  category: string
-  tags: string[]
-  history: string[]
-  description: string
-  keywords: string
-}
-// 导出 PostData：index.ts 的 hitmap 单例复用此全表契约类型
-export type PostData = Record<string, PostMeta>
-export let postCache: PostData = {}
-
-export const postData = async () => {
-  if (Object.keys(postCache).length > 0) return // 有缓存直接读缓存
-  // 原实现直接用全局 axios，但项目并未安装该依赖（无 import、无 CDN），运行时会 ReferenceError。
-  // 这里只是取一份静态 JSON，用原生 fetch 即可，不为此引入新依赖
-  const res = await fetch('/config/post.json')
-  if (!res.ok) {
-    console.error('[ERR]:未获取到post.json全表', res.status)
-    return
-  }
-  postCache = (await res.json()) as PostData
-  if (postCache) {
-    console.info('[INFO]:已经获取到post.json的数据')
-  } else {
-    console.error('[ERR]:未获取到post.json全表')
-  }
-}
-
-// 导出 CleanData：tagClean 等 pamin 域内模块共享此类型
-export type CleanData = {
-  key: string
-  title: string
-  date: string
-  category: string
-  tags: string[]
-}
-export let postCleanCache: CleanData[] = []
-
-export const postClean = async () => {
-  if (postCleanCache.length > 0) return // 已有缓存直接返回
-  if (Object.keys(postCache).length === 0) {
-    await postData()
-  }
-  // 步骤1：将数据kv反转存入中间对象
-  const orderMap: Record<number, string> = Object.create(null)
-  Object.entries(postCache).forEach(([k, v]) => {
-    orderMap[v.order] = k
-  })
-  // 步骤2：遍历中间对象，将values取出来压入数组里
-  const keys = Object.values(orderMap).filter(Boolean)
-  // 步骤3：遍历keys，把精简字段打入容器
-  postCleanCache = []
-  keys.forEach((key) => {
-    const meta = postCache[key]!
-    postCleanCache.push({
-      key,
-      title: meta.title,
-      date: meta.date,
-      category: meta.category,
-      tags: meta.tags,
-    })
-  })
-}
 
 /* ====================<postToc>==================== */
 type HeadingItem = {
@@ -261,11 +193,17 @@ export const codeCopy = (e: MouseEvent) => {
 }
 export const imgBox = async () => {
   if (!root.value) return
+  // 幂等守卫：只取未绑定过的图片并打标记，防止正文里已有灯箱图片时重复 attach
+  const imgs = Array.from(root.value.querySelectorAll<HTMLImageElement>('img:not([data-zoom-bound])'))
+  if (!imgs.length) return
+  imgs.forEach((i) => {
+    i.dataset.zoomBound = '1'
+  })
   const { default: mediumZoom } = await import('medium-zoom')
   if (!zoom) {
-    zoom = mediumZoom('.content img', { background: 'var(--g-bg)' })
+    zoom = mediumZoom(imgs, { background: 'var(--g-bg)' })
   } else {
-    zoom.attach('.content img')
+    zoom.attach(imgs)
   }
 }
 
@@ -275,7 +213,7 @@ export const imgBox = async () => {
  * 此处只做同步读取与响应式包装，不做任何推导
  * glob 而非静态 import：首次构建该文件可能尚未生成，glob 返回空对象而非编译报错
  */
-export type NavInfo = { title: string; link: string } | null
+type NavInfo = { title: string; link: string } | null
 type NeighborMeta = { prev?: NavInfo; next?: NavInfo }
 
 const neighborMap = import.meta.glob<Record<string, NeighborMeta>>('/.cache/post.json', {
@@ -333,7 +271,8 @@ export const backToTop = () => {
  */
 export const scrollProgress = (): (() => void) => {
   const area = document.querySelector<HTMLElement>('.main')
-  const progress = document.querySelector<HTMLElement>('.progress')
+  // 收窄到返回顶部按钮内的进度环：正文写作组件里也有 .progress，通用选择器会命中错元素
+  const progress = document.querySelector<HTMLElement>('.back-top-btn .progress')
   if (!area || !progress) return () => {}
 
   const canArea = area.scrollHeight > area.clientHeight
@@ -360,12 +299,14 @@ export const scrollProgress = (): (() => void) => {
  * 容器高度：option 里可写 "height": 320 自定义（非 echarts 标准字段，渲染前摘出）。
  */
 export const echarts = async () => {
-  const blocks = document.querySelectorAll('pre[data-lang="echarts"] code')
+  const blocks = document.querySelectorAll('pre[data-lang="echarts"] code:not([data-rendered])')
   if (!blocks.length) return
   const { init } = await import('echarts')
   for (const block of Array.from(blocks)) {
     const pre = block.closest('pre')
     if (!pre) continue
+    // 先标记再渲染：echarts 会往 pre 里注入容器，不标记会被 MutationObserver 反复触发
+    block.setAttribute('data-rendered', '1')
     try {
       const option = JSON.parse(block.textContent || '{}')
       // 摘出自定义高度字段（默认 320px），其余原样交给 echarts
@@ -383,7 +324,10 @@ export const echarts = async () => {
 
 /* ====================<mermaid>==================== */
 export const mermaid = async () => {
-  const mermaidCode = document.querySelectorAll('pre[data-lang="mermaid"] code')
+  const mermaidCode = document.querySelectorAll('pre[data-lang="mermaid"] code:not([data-rendered])')
+  if (!mermaidCode.length) return
+  // 先标记再渲染：mermaid 会把 code 换成 svg，不标记会被 MutationObserver 反复触发
+  mermaidCode.forEach((el) => el.setAttribute('data-rendered', '1'))
 
   //   库变量改名 mermaidLib，避免与导出函数同名遮蔽
   const { default: mermaidLib } = await import('mermaid')

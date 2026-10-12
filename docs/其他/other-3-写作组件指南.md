@@ -79,13 +79,13 @@ Vite | 下一代前端构建工具 | https://cn.vite.dev
 
 ### filetree 文件树
 
-用缩进（2 空格或 1 个 tab 为一级）表达层级，目录名以 `/` 结尾；支持『路径 | 注释』：
+用 Markdown 无序列表写法（`-` / `*` / `+`），层级由列表缩进表达，目录名以 `/` 结尾；支持『名称 | 注释』：
 
 ```filetree
-src/ | 源码目录
-  build/ | 编译脚本
-  theme/ | 主题
-package.json | 项目配置
+- src/ | 源码目录
+  - build/ | 编译脚本
+  - theme/ | 主题
+- package.json | 项目配置
 ```
 
 ### terminal 终端窗口

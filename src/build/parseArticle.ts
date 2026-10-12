@@ -2,6 +2,9 @@
 // 并把 post.json 原样复制为 .cache/post.json（可import 同源副本，供 PostUpdate / search 读元数据）
 // 由 vite buildStart 调用。
 //
+// 路径模型：本脚本不再自行推导"项目根"，一切产物路径来自显式传入的 BuildContext
+// （见 src/cli/types.ts）。引擎因此能服务任意用户项目，而非只服务本仓库。
+//
 // 职责边界：编译期做「md → html」、「解析元数据」与「由目录结构派生侧栏树」三件事。
 // 侧栏树不再手写配置 —— 由 docs/ 的目录结构派生（见 deriveSidebar）：分组即目录、同级自然序，
 // 新增/改名文档后侧栏自动跟随。同一棵树既产出 .cache/sidebar.json，又用于推导上下篇。
@@ -12,7 +15,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ARTICLE_DIR, MAX_DEPTH } from '../config/site.config.ts'
 
 import MarkdownIt from 'markdown-it'
 import type { Highlighter } from 'shiki'
@@ -32,6 +34,8 @@ import { lightEmoji } from '@mdit/plugin-emoji'
 import { ins } from '@mdit/plugin-ins'
 import { componentPlugin } from '@mdit-vue/plugin-component'
 import { slugify } from '@mdit-vue/shared'
+import { serializeSiteConfig, type ResolvedConfig } from '../config/site.config.ts'
+import type { BuildContext } from '../cli/types.ts'
 import {
   componentFenceLangs,
   renderComponentFence,
@@ -73,22 +77,37 @@ const KNOWN_LANGS: ReadonlySet<string> = new Set([
 // 语法高亮器，configLanguage 初始化，fence 规则闭包使用
 let highlighter: Highlighter | null = null
 
-// 扫盘最大层级：docs/ 下的第一层目录算第 1 级，超出深度的分支整体不纳入编译
-// （侧栏树同源于该扫描结果，超出深度的分支同样不进侧栏）
-
-// 脚本文件路径 → 项目根路径 → 各产物路径
+// 脚本文件路径：插件签名与自身 mtime 锚这里（包内路径跨项目稳定）
 const scriptPath = fileURLToPath(import.meta.url)
 const dirPath = path.dirname(scriptPath)
-const rootPath = path.resolve(dirPath, '../..')
-const articlePath = path.join(rootPath, ARTICLE_DIR)
-const vuePath = path.join(rootPath, '.cache')
-const jsonPath = path.join(rootPath, 'public/config/post.json')
-const postMetaPath = path.join(vuePath, 'post.json')
-const sidebarPath = path.join(rootPath, 'public/config/sidebar.json')
-const sidebarMetaPath = path.join(vuePath, 'sidebar.json')
-// 首页内容源：src/theme/views/home.md → .cache/home.vue（与文章同一渲染管线，但不进侧栏树与 post.json）
-const homeMdPath = path.join(rootPath, 'src/theme/views/home.md')
-const homeVuePath = path.join(vuePath, 'home.vue')
+
+// 产物路径全部由 BuildContext 派生，本轮编译开始时绑定一次。
+// 原实现锚在 import.meta.url 推出的"仓库根"上，改为锚 ctx 后引擎才能服务任意用户项目
+let articlePath = ''
+let vuePath = ''
+let jsonPath = ''
+let postMetaPath = ''
+let sidebarPath = ''
+let sidebarMetaPath = ''
+let homeMdPath = ''
+let homeVuePath = ''
+let maxDepth = 6
+let siteConfig: ResolvedConfig | null = null
+
+const bindContext = (ctx: BuildContext) => {
+  articlePath = ctx.articleDir
+  vuePath = path.join(ctx.workDir, '.cache')
+  jsonPath = path.join(ctx.workDir, 'public/config/post.json')
+  postMetaPath = path.join(vuePath, 'post.json')
+  sidebarPath = path.join(ctx.workDir, 'public/config/sidebar.json')
+  sidebarMetaPath = path.join(vuePath, 'sidebar.json')
+  // 首页内容源：用户 home.md（缺省回退包内模板）→ .cache/home.vue，
+  // 与文章同一渲染管线，但不进侧栏树与 post.json
+  homeMdPath = ctx.homeMdPath
+  homeVuePath = path.join(vuePath, 'home.vue')
+  maxDepth = ctx.maxDepth
+  siteConfig = ctx.config
+}
 
 /*
  * id: ensureJsonDir
@@ -108,28 +127,46 @@ const ensureJsonDir = () => {
  * 签名必须掺入本脚本自身的 mtime/size：元数据提取逻辑（如 updated 的兜底来源）改动后，
  * docs/ 一个字没变，签名却必须变化，否则缓存短路会让新逻辑要手动清 .cache 才生效
  *
- * 侧栏树改由 docs/ 目录结构派生后，不再需要单独掺入配置文件：文件的增删改已由下面的
+ * 侧栏树改由 docs/ 目录结构派生后，不再需要单独掺入侧栏配置文件：文件的增删改已由下面的
  * files 列表覆盖（新增目录 = 新增文件），所以只改目录结构也一定会让签名变化。
+ * 但站点配置（title / nav / homeCards 等）改了 docs/ 一个字没变，产物却必须重生成，故单独掺入。
  *
  * 组件插件化后还必须掺入 plugins/ 下所有插件文件：只改组件外壳而 docs/ 未动时，
  * 签名若不变就会短路复用缓存，新组件产物永远不会生效
  */
+// 递归收集 plugins/ 下所有 .ts（含子目录）：签名与增量复用判定共用
+// 只扫顶层会让 plugins/registry.ts 引出的子目录插件改动被漏掉，一旦漏掉签名不变就短路复用旧产物
+const pluginFiles = (): string[] => {
+  const out: string[] = []
+  const walk = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, e.name)
+      if (e.isDirectory()) walk(full)
+      else if (e.name.endsWith('.ts')) out.push(full)
+    }
+  }
+  try {
+    walk(path.join(dirPath, 'plugins'))
+  } catch {
+    return []
+  }
+  return out
+}
+// plugins/ 下最新 mtime：SFC/home 复用判定用它兜底（插件改动后旧产物必须重渲染）
+const pluginLatestMtime = (): number =>
+  pluginFiles().reduce((max, f) => Math.max(max, fs.statSync(f).mtimeMs), 0)
+
 const compileSignature = (files: string[]): string => {
   const self = fs.statSync(scriptPath)
   const selfTag = `__self__:${self.mtimeMs}:${self.size}`
   const pluginTags = (() => {
-    try {
-      const dir = path.join(dirPath, 'plugins')
-      return fs
-        .readdirSync(dir)
-        .filter((f) => f.endsWith('.ts'))
-        .map((f) => {
-          const s = fs.statSync(path.join(dir, f))
-          return `__plugin_${f}__:${s.mtimeMs}:${s.size}`
-        })
-    } catch {
-      return ['__plugins__:missing']
-    }
+    const list = pluginFiles()
+    if (list.length === 0) return ['__plugins__:missing']
+    // tag 用相对路径而非文件名：子目录同名文件不会互相覆盖
+    return list.map((f) => {
+      const s = fs.statSync(f)
+      return `__plugin_${path.relative(dirPath, f)}__:${s.mtimeMs}:${s.size}`
+    })
   })()
   // 首页内容源同样掺入签名：home.md 改动后不能被短路缓存挡住，否则新内容永远不生效
   const homeTag = (() => {
@@ -140,10 +177,13 @@ const compileSignature = (files: string[]): string => {
       return '__home_md__:missing'
     }
   })()
+  // 站点配置同样掺入签名：配置改动后产物（site.json 及依赖配置的渲染）必须重生成
+  const configTag = `__config__:${JSON.stringify(siteConfig)}`
   return [
     selfTag,
     ...pluginTags,
     homeTag,
+    configTag,
     ...files.map((f) => {
       const s = fs.statSync(path.join(articlePath, f))
       return `${f}:${s.mtimeMs}:${s.size}`
@@ -192,11 +232,11 @@ const mtimeToDate = (file: string): string => {
 /*
  * id: walkDocs
  * fn: 递归扫盘，返回相对 docs/ 的 md 相对路径（统一用 / 分隔，id 即该路径去掉 .md）
- * depth 从 1 起算（docs/ 下的第一层文件/目录算第 1 级），超过 MAX_DEPTH 的分支直接剪掉
+ * depth 从 1 起算（docs/ 下的第一层文件/目录算第 1 级），超过 maxDepth 的分支直接剪掉
  */
 const walkDocs = (dir: string, prefix: string, depth: number, out: string[]) => {
-  if (depth > MAX_DEPTH) {
-    console.warn(`[WARN]:${prefix} 超过最大层级 ${MAX_DEPTH}，该分支已跳过`)
+  if (depth > maxDepth) {
+    console.warn(`[WARN]:${prefix} 超过最大层级 ${maxDepth}，该分支已跳过`)
     return
   }
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -335,31 +375,14 @@ const syncSidebarMeta = () => {
 
 /*
  * id: syncSiteConfig
- * fn: 把 src/config/site.ts 全量写进 .cache/site.json——站点配置编译期写死进产物，
- * theme 内不再 import 配置源文件，统一从这份产物同步读（SSG 预渲染和客户端一致）
+ * fn: 把已解析的站点配置（ctx.config）序列化进 .cache/site.json——站点配置编译期写死进产物，
+ * theme 内不 import 配置源文件，统一从这份产物同步读（SSG 预渲染和客户端一致）
  * 改配置后需重新构建才生效（开发模式不热更新配置）
  */
 const syncSiteConfig = () => {
-  const sitePath = path.join(rootPath, 'src/config/site.config.ts')
-  if (!fs.existsSync(sitePath)) return
-  // 动态 import 会引入异步复杂度，配置是纯常量导出，用 Function 构造器同步求值
-  const mod = fs.readFileSync(sitePath, 'utf8')
-  const exports: Record<string, unknown> = {}
-  // 提取全部 export const 声明：export const NAME = value → exports[NAME] = value
-  const re = /export\s+const\s+(\w+)\s*=\s*(`[^`]*`|'[^']*'|"[^"]*"|\[[\s\S]*?\]|[^\n]+)/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(mod)) !== null) {
-    const name = m[1]!
-    const raw = m[2]!.trim()
-    try {
-      // 模板字符串/数组/对象字面量用 Function 求值；纯字符串也走这里统一处理
-      // eslint-disable-next-line no-new-func
-      exports[name] = new Function(`return (${raw})`)()
-    } catch {
-      console.warn(`[WARN]:配置 ${name} 求值失败，已跳过`)
-    }
-  }
-  fs.writeFileSync(path.join(vuePath, 'site.json'), JSON.stringify(exports, null, 4), 'utf8')
+  if (!siteConfig) return
+  const site = serializeSiteConfig(siteConfig)
+  fs.writeFileSync(path.join(vuePath, 'site.json'), JSON.stringify(site, null, 4), 'utf8')
   console.log('[INFO]:站点配置已写入 .cache/site.json')
 }
 
@@ -371,7 +394,8 @@ const configLanguage = async (absFiles: string[]) => {
   const langSet = new Set<string>(['text'])
   for (const file of absFiles) {
     const _ = fs.readFileSync(file, 'utf-8')
-    for (const i of _.matchAll(/^```([\w+-]+)/gm)) {
+    // 兼容缩进围栏与「``` js」空格分隔：只认 ^``` 会漏掉缩进块和空格写法，语言进不了 shiki 白名单
+    for (const i of _.matchAll(/^[ \t]*```[ \t]*([\w+-]+)/gm)) {
       const lang = (i[1] ?? '').toLowerCase()
       // 组件语言名都走 fence 拦截拼外壳，不是真语言，不进 shiki（注册表统一汇总，含 mermaid）
       if (!componentFenceLangs.has(lang)) {
@@ -563,7 +587,7 @@ const flattenSidebar = (nodes: SidebarNode[]): { id: string; title: string; link
  *     但不进侧栏树与 post.json（首页不是文章）。源文件不存在时清掉过时产物。
  *     mtime 增量与文章 SFC 同规则：产物不旧于源文件与本脚本则跳过重渲染
  */
-const compileHome = (md: InstanceType<typeof MarkdownIt>) => {
+const compileHome = (md: InstanceType<typeof MarkdownIt>, pluginMtime: number) => {
   if (!fs.existsSync(homeMdPath)) {
     if (fs.existsSync(homeVuePath)) fs.rmSync(homeVuePath)
     return
@@ -571,7 +595,8 @@ const compileHome = (md: InstanceType<typeof MarkdownIt>) => {
   const fresh =
     fs.existsSync(homeVuePath) &&
     fs.statSync(homeVuePath).mtimeMs >= fs.statSync(homeMdPath).mtimeMs &&
-    fs.statSync(homeVuePath).mtimeMs >= fs.statSync(scriptPath).mtimeMs
+    fs.statSync(homeVuePath).mtimeMs >= fs.statSync(scriptPath).mtimeMs &&
+    fs.statSync(homeVuePath).mtimeMs >= pluginMtime
   if (fresh) return
   const rendered = md.render(fs.readFileSync(homeMdPath, 'utf8'))
   fs.writeFileSync(homeVuePath, `<template>${rendered}</template>`, 'utf8')
@@ -586,7 +611,8 @@ const mdParser = (files: string[]) => {
   const md = initMd()
   configFence(md)
   setupComponentPlugins(md) // 挂载容器语法的组件插件（:::tip/info/warn/error 提示块）
-  compileHome(md) // 首页内容源同管线渲染，但不进侧栏树与 post.json
+  const pluginMtime = pluginLatestMtime() // 插件最新 mtime：SFC/home 复用判定共用
+  compileHome(md, pluginMtime) // 首页内容源同管线渲染，但不进侧栏树与 post.json
 
   const articles: Record<string, ArticleMeta> = {}
 
@@ -601,7 +627,8 @@ const mdParser = (files: string[]) => {
     const sfcMtimeOk =
       fs.existsSync(sfcPath) &&
       fs.statSync(sfcPath).mtimeMs >= fs.statSync(path.join(articlePath, file)).mtimeMs &&
-      fs.statSync(sfcPath).mtimeMs >= fs.statSync(scriptPath).mtimeMs
+      fs.statSync(sfcPath).mtimeMs >= fs.statSync(scriptPath).mtimeMs &&
+      fs.statSync(sfcPath).mtimeMs >= pluginMtime
     const sfcFresh = sfcMtimeOk
 
     if (!sfcFresh) {
@@ -663,13 +690,14 @@ const manager = async () => {
       const md = initMd()
       configFence(md)
       setupComponentPlugins(md)
-      compileHome(md)
+      compileHome(md, pluginLatestMtime())
     }
     ensureJsonDir()
     fs.writeFileSync(jsonPath, '{}', 'utf8')
     fs.writeFileSync(sidebarPath, '[]', 'utf8')
     syncPostMeta()
     syncSidebarMeta()
+    syncSiteConfig() // 空文档分支同样要补建 site.json，否则 theme 读不到配置产物
     fs.writeFileSync(path.join(vuePath, '.compile-sig.pending'), compileSignature([]), 'utf8')
     return
   }
@@ -711,21 +739,27 @@ const manager = async () => {
 
 /*
  * id: finalizeSignature
- * fn: pending 签名转正，由两处调用：构建成功后 vite.config.ts 的 onFinished，
- * 以及 dev 编译完成后 vite.config.ts 的 buildStart（dev 到不了 onFinished）。
+ * fn: pending 签名转正，由两处调用：构建成功后引擎 vite 配置的 onFinished，
+ * 以及 dev 编译完成后引擎 compile-articles 插件的 buildStart（dev 到不了 onFinished）。
  * 转正后正式签名即描述磁盘上那份产物，输入回退到旧状态时才不会误判短路
  */
-export const finalizeSignature = () => {
-  const pendingFile = path.join(vuePath, '.compile-sig.pending')
-  const sigFile = path.join(vuePath, '.compile-sig')
+export const finalizeSignature = (ctx: BuildContext) => {
+  const cacheDir = path.join(ctx.workDir, '.cache')
+  const pendingFile = path.join(cacheDir, '.compile-sig.pending')
+  const sigFile = path.join(cacheDir, '.compile-sig')
   if (fs.existsSync(pendingFile)) {
     fs.copyFileSync(pendingFile, sigFile)
   }
 }
 
-// 直接运行本文件时编译；作为模块被 vite.config 导入时由 buildStart 调用
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  manager()
+/*
+ * id: compileArticles
+ * fn: 编译入口。绑定本轮 BuildContext 后交给 manager；
+ * 由引擎 compile-articles 插件在 buildStart 调用
+ */
+export const compileArticles = async (ctx: BuildContext) => {
+  bindContext(ctx)
+  await manager()
 }
 
-export default () => manager()
+export default compileArticles

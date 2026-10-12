@@ -24,13 +24,15 @@ export const extraBlocks: ComponentPlugin = {
         .filter(Boolean)
         .map((l) => {
           const [title = '', desc = '', link = ''] = ctx.splitRow(l)
+          // 链接白名单：仅放行 http(s)/mailto/站内相对路径/锚点，其他协议（javascript: 等）降级为不可点卡片
+          const safe = /^(https?:\/\/|mailto:|\/|#)/i.test(link.trim()) ? link.trim() : ''
           const body = `
     <div class="card-item">
         <div class="card-title">${esc(title)}</div>
         ${desc ? `<div class="card-desc">${esc(desc)}</div>` : ''}
     </div>`
-          return link
-            ? `\n    <a class="card-link" href="${esc(link)}">${body}\n    </a>`
+          return safe
+            ? `\n    <a class="card-link" href="${esc(safe)}">${body}\n    </a>`
             : body
         })
         .join('')

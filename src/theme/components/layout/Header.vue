@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Logo from '../Logo.vue'
 import Nav from '../Nav.vue'
@@ -7,7 +7,7 @@ import Search from '../Search.vue'
 import Theme from '../Theme.vue'
 import Github from '../icon/Github.vue'
 import PostLocalNav from '../post/PostLocalNav.vue'
-import { toggleSidebarOpen } from '@/composables/sidebar'
+import { toggleSidebarOpen, closeSidebar } from '@/composables/sidebar'
 /* 汉堡按钮仅文档页显示：首页/404 没有侧栏，点了没意义；
    离开文档页时顺手收起抽屉，避免遮罩残留 */
 const route = useRoute()
@@ -16,10 +16,14 @@ const onToggle = () => {
   if (!isPost.value) return
   toggleSidebarOpen()
 }
+// 抽屉只在文档页有效：切到首页/404 后若不收起，遮罩会盖住整页
+watch(isPost, (v) => {
+  if (!v) closeSidebar()
+})
 </script>
 
 <template>
-  <aside class="header">
+  <aside class="header" :class="{ 'is-post': isPost }">
     <button v-if="isPost" class="hamburger" aria-label="打开导航菜单" @click="onToggle">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
@@ -166,6 +170,17 @@ const onToggle = () => {
     flex: 1 1 100%;
     order: 2;
     justify-content: center;
+  }
+
+  /* 文档页：站内导航交给侧栏抽屉，顶栏只留图标，el-list 收回第一行，
+     避免「el-list 独占一行」+「PostLocalNav 独占一行」叠加把顶栏撑成三行
+     （顶栏高度须与 content.css 的 scroll-margin-top 对齐，否则锚点跳转被遮挡） */
+  .header.is-post .el-list {
+    flex: 0 0 auto;
+    order: 0;
+  }
+  .header.is-post :deep(.nav) {
+    display: none;
   }
 }
 

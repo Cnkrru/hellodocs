@@ -2,14 +2,17 @@
 {
   "extends": "@tsconfig/node24/tsconfig.json",
   "include": [
-    "vite.config.*",
     "vitest.config.*",
     "cypress.config.*",
     "playwright.config.*",
     "eslint.config.*",
-    // 编译期脚本：跑在 Node 侧（node:fs / process），需 node types，
-    // 故与 vite.config 同归本配置，而非 tsconfig.app.json 的 DOM 环境
-    "src/build/**/*"
+    // 编译期脚本与 CLI：跑在 Node 侧（node:fs / process），需 node types，
+    // 故与 vite config 同归本配置，而非 tsconfig.app.json 的 DOM 环境
+    "src/build/**/*",
+    "src/cli/**/*",
+    "src/config/**/*",
+    // 站点配置：由 CLI 经 jiti 运行时加载，同样属 Node 侧
+    "krudoc.config.ts"
   ],
   "compilerOptions": {
     // Most tools use transpilation instead of Node.js's native type-stripping.
