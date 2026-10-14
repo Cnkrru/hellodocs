@@ -4,6 +4,8 @@ import { useRoute } from 'vue-router'
 // 类型导入在编译期被擦除，不会把库打进主包
 import type { Zoom } from 'medium-zoom'
 
+import { postMeta } from './meta'
+
 /* ====================<postToc>==================== */
 type HeadingItem = {
   id: string
@@ -209,26 +211,16 @@ export const imgBox = async () => {
 
 /* ====================<postNeighbor>==================== */
 /*
- * 上下篇导航：编译期已把 prev/next 写进 .cache/post.json（parseArticle.ts 按 sidebar 配置顺序算好），
- * 此处只做同步读取与响应式包装，不做任何推导
- * glob 而非静态 import：首次构建该文件可能尚未生成，glob 返回空对象而非编译报错
+ * 上下篇导航：编译期已把 prev/next 写进 .cache/post.json（parseArticle.ts 按派生侧栏的展平顺序算好），
+ * 此处只做同步读取与响应式包装，不做任何推导。元数据统一从 meta.ts 取（单一 glob 出处）
  */
-type NavInfo = { title: string; link: string } | null
-type NeighborMeta = { prev?: NavInfo; next?: NavInfo }
-
-const neighborMap = import.meta.glob<Record<string, NeighborMeta>>('/.cache/post.json', {
-  eager: true,
-  import: 'default',
-})
-const neighborData = neighborMap['/.cache/post.json'] ?? {}
-
 export const postNeighbor = () => {
   const route = useRoute()
   // pathMatch 是可重复参数，嵌套文章的 id 含斜杠，需拼回完整 id
   const postKey = computed(() =>
     route.params.pathMatch ? (route.params.pathMatch as string[]).join('/') : '',
   )
-  const meta = computed(() => neighborData[postKey.value])
+  const meta = computed(() => postMeta[postKey.value])
   const pre = computed(() => meta.value?.prev ?? null)
   const next = computed(() => meta.value?.next ?? null)
   return { pre, next }
@@ -236,8 +228,8 @@ export const postNeighbor = () => {
 
 /* ====================<postUpdated>==================== */
 /*
- * 最后编辑于：读编译期产物 .cache/post.json 的 updated 字段（parseArticle 用源文件 mtime 推导）
- * 与 postNeighbor 同一份 glob 数据，SSG 预渲染和客户端都同步可读
+ * 最后编辑于：读编译期产物 .cache/post.json 的 updated（parseArticle 用源文件 mtime 推导）
+ * 与 postNeighbor 同一份数据，SSG 预渲染和客户端都同步可读
  */
 export const postUpdated = () => {
   const route = useRoute()
@@ -245,7 +237,7 @@ export const postUpdated = () => {
     const value = route.params.pathMatch
     return Array.isArray(value) ? value.join('/') : String(value ?? '')
   })
-  const meta = computed(() => neighborData[postKey.value] as { updated?: string } | undefined)
+  const meta = computed(() => postMeta[postKey.value])
   // updated 由编译期 mtime 推导，正常都有值；仍兜一层空态
   return computed(() => (meta.value?.updated ? `最后编辑于 ${meta.value.updated}` : ''))
 }

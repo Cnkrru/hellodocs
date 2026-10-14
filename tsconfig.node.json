@@ -12,7 +12,7 @@
     "src/cli/**/*",
     "src/config/**/*",
     // 站点配置：由 CLI 经 jiti 运行时加载，同样属 Node 侧
-    "krudoc.config.ts"
+    "vdoc.config.ts"
   ],
   "compilerOptions": {
     // Most tools use transpilation instead of Node.js's native type-stripping.

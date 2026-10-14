@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /*
- * 顶栏导航：数据源是手写的 src/theme/config/site.ts 的 SITE_NAV
+ * 顶栏导航：数据源是编译期产物 .cache/site.json 的 SITE_NAV
+ * （用户在 vdoc.config.ts 的 nav 里配置，parseArticle 序列化进产物）
  *
  * 单 v-for 直接渲染，没有嵌套结构（不设下拉菜单），故不需要递归组件或树形数据
- * 配置在模块顶层 import —— 与侧栏同理，SSG 阶段就能渲染完整，不会先出空条再补
+ * 配置在模块顶层读取 —— 与侧栏同理，SSG 阶段就能渲染完整，不会先出空条再补
  */
 import { site } from '@/composables/site'
 

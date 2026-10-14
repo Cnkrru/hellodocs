@@ -1,9 +1,9 @@
 {
-  "name": "krudoc",
+  "name": "@hello/vdoc",
   "version": "0.1.0",
   "description": "基于 Vue 3 + Vite 的静态文档站生成器：docs/ 目录即站点，编译期直出静态 HTML",
   "keywords": [
-    "krudoc",
+    "vdoc",
     "ssg",
     "static-site-generator",
     "docs",
@@ -20,7 +20,7 @@
   },
   "type": "module",
   "bin": {
-    "krudoc": "bin/krudoc.mjs"
+    "vdoc": "bin/vdoc.mjs"
   },
   "files": [
     "bin",
@@ -35,10 +35,10 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "dev": "node ./bin/krudoc.mjs dev",
+    "dev": "node ./bin/vdoc.mjs dev",
     "build": "run-p type-check \"build-only {@}\" --",
-    "preview": "node ./bin/krudoc.mjs preview",
-    "build-only": "node ./bin/krudoc.mjs build",
+    "preview": "node ./bin/vdoc.mjs preview",
+    "build-only": "node ./bin/vdoc.mjs build",
     "type-check": "vue-tsc --build",
     "lint": "run-s \"lint:*\"",
     "lint:oxlint": "oxlint . --fix",
@@ -48,9 +48,7 @@
   "dependencies": {
     "@mdit-vue/plugin-component": "^3.0.2",
     "@mdit-vue/shared": "^3.0.2",
-    "@mdit/plugin-alert": "^2.0.2",
     "@mdit/plugin-anchor": "^2.2.2",
-    "@mdit/plugin-container": "^2.0.2",
     "@mdit/plugin-emoji": "^1.2.2",
     "@mdit/plugin-footnote": "^1.1.2",
     "@mdit/plugin-ins": "^2.1.2",
@@ -58,7 +56,7 @@
     "@mdit/plugin-sub": "^1.1.2",
     "@mdit/plugin-sup": "^1.1.2",
     "@mdit/plugin-tasklist": "^1.1.3",
-    "@unhead/vue": "^3.4.2",
+    "@unhead/vue": "^2.1.17",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/server-renderer": "^3.5.43",
     "beasties": "^0.3.5",

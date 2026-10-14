@@ -1,20 +1,31 @@
 /*
  * 提示块组件插件（admonition）
  *
- * 语法（CommonMark directives 提案风格，Docusaurus/remark-directive 同款）：
- *   :::tip 可选标题
- *   内容（走正常 md 渲染）
- *   :::
- * 标题省略时用各等级默认文案。
+ * 语法：围栏代码块，语言名即等级（tip / info / warn / error），语言名之后可跟可选标题：
+ *   ```warn 数据丢失风险
+ *   正文走正常 markdown 渲染，块内仍可用行内语法与其他组件。
+ *   ```
+ * 标题省略时回落各等级默认文案；不依赖任何 markdown-it 容器/引用插件，
+ * 与其余写作组件同一套 fence 拦截，外壳结构与 content.css 全部沿用。
  *
- * 实现：@mdit/plugin-container 的 open/closeRenderer 分两段渲染，
- * open 出图标+标题+body 开标签，中间内容由 markdown-it 正常渲染，close 收尾。
- * 外壳结构与原 parseArticle.ts 完全一致，content.css 无需改动。
+ * 结构约定：HTML 片段一律抽成模块级 const 模板，render 只留解析与编排的 TS 逻辑。
  */
-import type MarkdownIt from 'markdown-it'
-import { container } from '@mdit/plugin-container'
-import { alert } from '@mdit/plugin-alert'
 import type { ComponentPlugin } from './base.ts'
+
+/* ====================<HTML 模板>==================== */
+
+// 外壳开标签：图标 + 标题 + body 开标签，正文由调用方渲染后传入
+const ADMONITION_OPEN = (type: string, icon: string, title: string): string => `
+<!-- == admonition ${type} == -->
+<div class="admonition admonition-${type}">
+    <div class="admonition-head">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>
+        <span class="admonition-title">${title}</span>
+    </div>
+    <div class="admonition-body">`
+
+// 外壳收尾：关闭 body 与外壳两层
+const ADMONITION_CLOSE = '</div></div>'
 
 // 等级 → 图标键 + 默认文案
 const ADMONITION_META: Record<string, { icon: string; label: string }> = Object.freeze({
@@ -33,72 +44,22 @@ const ADMONITION_ICON: Record<string, string> = Object.freeze({
   asterisk: '<path d="M12 4v16"/><path d="M5 8l5.8 3.7 3.6-2.2"/><path d="m11 20 1-6 6-1"/>',
 })
 
-const shellOpen = (type: string, title: string, esc: (s: string) => string): string => {
-  const meta = ADMONITION_META[type] || ADMONITION_META.info
-  // 标题来自文档正文，必须转义后再进 HTML：否则「:::tip <img onerror=...>」可注入
-  const t = title ? esc(title) : meta.label
-  return `
-<!-- == admonition ${type} == -->
-<div class="admonition admonition-${type}">
-    <div class="admonition-head">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ADMONITION_ICON[meta.icon]}</svg>
-        <span class="admonition-title">${t}</span>
-    </div>
-    <div class="admonition-body">`
-}
-
-const shellClose = (): string => `</div></div>`
-
-/*
- * GFM Alerts 别名（GitHub 官方标准）：
- *   > [!NOTE] 可选标题
- *   > 内容
- * 与 :::tip 同一渲染出口（复用外壳与样式），写法与 GitHub README 完全一致。
- * 等级映射：note→info、tip→tip、important/warning→warn、caution→error
- */
-const GFM_ALERT_MAP: Record<string, string> = Object.freeze({
-  note: 'info',
-  tip: 'tip',
-  important: 'warn',
-  warning: 'warn',
-  caution: 'error',
-})
+/* ====================<插件实现>==================== */
 
 export const admonition: ComponentPlugin = {
   name: 'admonition',
-  fenceLangs: [], // 容器语法，不走 fence 拦截
+  // 语言名即等级，四级共用同一外壳（content.css 已按 admonition-<type> 配色）
+  fenceLangs: ['tip', 'info', 'warn', 'error'],
 
-  setup(md: InstanceType<typeof MarkdownIt>) {
-    const esc = md.utils.escapeHtml
-    for (const type of ['tip', 'info', 'warn', 'error']) {
-      md.use(container, {
-        name: type,
-        openRenderer(tokens, idx) {
-          const token = tokens[idx]!
-          // 标题：`:::info 标题` 取『标题』，缺省为空串（fallback 到默认文案）
-          const raw = token.info.trim().slice(type.length).trim()
-          return shellOpen(type, raw, esc)
-        },
-        closeRenderer() {
-          return shellClose()
-        },
-      })
-    }
-    // GFM Alerts 别名：> [!NOTE] 等引用块语法，映射到同一套外壳
-    md.use(alert, {
-      alertNames: ['note', 'tip', 'important', 'warning', 'caution'],
-      openRenderer(tokens, idx) {
-        const token = tokens[idx]!
-        // info 形如『[!NOTE] 可选标题』：取等级名与剩余标题
-        const raw = token.info.trim()
-        const m = /^\[!\s*(\w+)\s*\]?\s*(.*)$/i.exec(raw)
-        const name = (m?.[1] ?? 'note').toLowerCase()
-        const type = GFM_ALERT_MAP[name] ?? 'info'
-        return shellOpen(type, m?.[2] ?? '', esc)
-      },
-      closeRenderer() {
-        return shellClose()
-      },
-    })
+  render(ctx, content, info) {
+    // info 形如『warn 可选标题』：首词是等级，其余是标题
+    const [level = '', ...rest] = (info ?? '').trim().split(/\s+/)
+    const type = level.toLowerCase()
+    const meta = ADMONITION_META[type]
+    // 语言名不在四级之内时交还默认高亮流程
+    if (!meta) return null
+    // 标题来自文档正文，必须转义后再进 HTML：否则 ```tip <img onerror=...> 可注入
+    const title = rest.length > 0 ? ctx.escapeHtml(rest.join(' ')) : meta.label
+    return `${ADMONITION_OPEN(type, ADMONITION_ICON[meta.icon]!, title)}${ctx.renderMarkdown(content)}${ADMONITION_CLOSE}`
   },
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import {
   RefKeyword,
   RefSearchRes,
@@ -14,8 +14,21 @@ import {
   unmountSearch,
 } from '@/composables/search'
 
+/*
+ * 索引按需构建：正文语料是独立 chunk，构建还要分词 200+ 篇文章，
+ * 首屏不必为用不到搜索的访客买单 —— 首次聚焦输入框或打开移动端面板时才建
+ * （buildIndex 内部幂等；未就绪期间的输入由组装器的 null 守卫兜住）
+ */
+const ensureIndex = () => {
+  void buildIndex()
+}
+
+const onFocusIndex = () => {
+  ensureIndex()
+  onFocus()
+}
+
 onMounted(() => {
-  buildIndex()
   mountSearch()
 })
 
@@ -30,14 +43,15 @@ const onKeydown = (e: KeyboardEvent) => {
     closePanel()
   }
 }
+
 /* ---- 移动端面板开关 ----
  * 面板挂到 body（Teleport），避免顶栏 overflow/stacking context 裁切；
  * 打开时锁 body 滚动，关闭时恢复并聚焦输入框
  */
-import { ref, nextTick } from 'vue'
 const panelOpen = ref(false)
 const overlayInput = ref<HTMLInputElement | null>(null)
 const openPanel = () => {
+  ensureIndex()
   panelOpen.value = true
   document.body.style.overflow = 'hidden'
   nextTick(() => overlayInput.value?.focus())
@@ -69,6 +83,7 @@ const goAndClose = (id: string) => {
             class="search-input"
             placeholder="搜索文档..."
             v-model="RefKeyword"
+            @focus="ensureIndex"
             @keydown="onKeydown"
             @keypress.enter="onEnter"
             aria-label="搜索文档"
@@ -81,7 +96,7 @@ const goAndClose = (id: string) => {
             <li v-for="result in RefSearchRes" :key="result.id">
               <a class="search-item" @click.prevent="goAndClose(result.id)" href="#">
                 <div class="search-item-title" v-html="searchHl(result.title, RefKeyword)"></div>
-                <div class="search-item-desc" v-html="searchHl(result.date, RefKeyword)"></div>
+                <div class="search-item-desc" v-html="searchHl(result.updated, RefKeyword)"></div>
               </a>
             </li>
           </ul>
@@ -95,9 +110,9 @@ const goAndClose = (id: string) => {
       class="search-input"
       placeholder="搜索文档..."
       v-model="RefKeyword"
+      @focus="onFocusIndex"
       @keydown="onKeydown"
       @keypress.enter="onEnter"
-      @focus="onFocus"
       aria-label="搜索文档"
     />
     <button
@@ -115,7 +130,7 @@ const goAndClose = (id: string) => {
         <li v-for="result in RefSearchRes" :key="result.id">
           <a class="search-item" @click.prevent="go(result.id)" href="#">
             <div class="search-item-title" v-html="searchHl(result.title, RefKeyword)"></div>
-            <div class="search-item-desc" v-html="searchHl(result.date, RefKeyword)"></div>
+            <div class="search-item-desc" v-html="searchHl(result.updated, RefKeyword)"></div>
           </a>
         </li>
       </ul>

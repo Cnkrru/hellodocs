@@ -1,5 +1,6 @@
 // 编译期脚本：docs/*.md → .cache/*.vue（正文 SFC）+ public/config/post.json（元数据）
 // 并把 post.json 原样复制为 .cache/post.json（可import 同源副本，供 PostUpdate / search 读元数据）
+// 另产出 .cache/search.json（id → 正文纯文本），供 theme 侧搜索按需加载建全文索引
 // 由 vite buildStart 调用。
 //
 // 路径模型：本脚本不再自行推导"项目根"，一切产物路径来自显式传入的 BuildContext
@@ -9,8 +10,8 @@
 // 侧栏树不再手写配置 —— 由 docs/ 的目录结构派生（见 deriveSidebar）：分组即目录、同级自然序，
 // 新增/改名文档后侧栏自动跟随。同一棵树既产出 .cache/sidebar.json，又用于推导上下篇。
 //
-// 写作组件已插件化（src/build/plugins/）：fence 组件（mermaid/timeline/steps/tabs/links/gallery）
-// 与容器组件（:::tip/info/warn/error 提示块）各自独立成插件，registry.ts 统一登记；
+// 写作组件已插件化（src/build/plugins/）：围栏类（mermaid/timeline/steps/tabs/links/gallery 与
+// 提示块 tip/info/warn/error）与行内类（kbd/badge/mark）各自独立成插件，registry.ts 统一登记；
 // 新增组件 = 加一个插件文件 + 在 registry 登记一行，本脚本不再改动。
 import fs from 'node:fs'
 import path from 'node:path'
@@ -81,12 +82,22 @@ let highlighter: Highlighter | null = null
 const scriptPath = fileURLToPath(import.meta.url)
 const dirPath = path.dirname(scriptPath)
 
+/*
+ * 日志分级：进度类 info 默认静默，VDOC_DEBUG=1 时打开；warn / error 始终输出。
+ * CLI 是给用户跑的命令，「文章文件夹存在」「post.json 存在」这类过程日志每次构建都刷屏，
+ * 会把真正的警告淹没（bin/vdoc.mjs 也已按「保持输出干净」收窄了错误输出）
+ */
+const info = (...args: unknown[]) => {
+  if (process.env.VDOC_DEBUG) console.log(...args)
+}
+
 // 产物路径全部由 BuildContext 派生，本轮编译开始时绑定一次。
 // 原实现锚在 import.meta.url 推出的"仓库根"上，改为锚 ctx 后引擎才能服务任意用户项目
 let articlePath = ''
 let vuePath = ''
 let jsonPath = ''
 let postMetaPath = ''
+let searchPath = ''
 let sidebarPath = ''
 let sidebarMetaPath = ''
 let homeMdPath = ''
@@ -94,11 +105,17 @@ let homeVuePath = ''
 let maxDepth = 6
 let siteConfig: ResolvedConfig | null = null
 
+// 当前正在渲染的页标识：文章 id（首页为 'home'）。插件上下文里透传出去，
+// 供需要『同页唯一』的组件（tabs 等分节面板）识别换页后归零页内序号
+let currentPageKey = ''
+
 const bindContext = (ctx: BuildContext) => {
   articlePath = ctx.articleDir
   vuePath = path.join(ctx.workDir, '.cache')
   jsonPath = path.join(ctx.workDir, 'public/config/post.json')
   postMetaPath = path.join(vuePath, 'post.json')
+  // 正文语料单独一份：post.json 被多个模块 eager import 进主包，正文不能往里塞
+  searchPath = path.join(vuePath, 'search.json')
   sidebarPath = path.join(ctx.workDir, 'public/config/sidebar.json')
   sidebarMetaPath = path.join(vuePath, 'sidebar.json')
   // 首页内容源：用户 home.md（缺省回退包内模板）→ .cache/home.vue，
@@ -229,6 +246,43 @@ const mtimeToDate = (file: string): string => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+// 单篇进检索索引的正文上限：整份 search.json 的体积与浏览器侧索引内存都可控
+const SEARCH_TEXT_LIMIT = 2000
+
+/*
+ * id: toPlainText
+ * fn: md 源码 → 检索用纯文本，剥掉标记语法
+ * 代码块内**保留**（围栏标记去掉，内容留着）—— 文档站里搜 API 名 / 配置项是刚需，
+ * 把代码整段丢掉等于搜索残废；图片与链接只留链接文字，避免 URL 污染召回
+ */
+const toPlainText = (source: string): string =>
+  source
+    .replace(/^\s*```.*$/gm, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s{0,3}>\s?/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/[`*_~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, SEARCH_TEXT_LIMIT)
+
+/*
+ * id: titleOf
+ * fn: 由文章 id 推导显示标题
+ * 常规取文件名末段（与侧栏、上下篇、搜索三处显示同一个名字）；
+ * 例外是目录索引页 index.md —— 它代表所在目录，标题取目录名，
+ * 否则侧栏会出现一堆字面量『index』相互无区别（docs 根下那个取站点标题）
+ */
+const titleOf = (id: string): string => {
+  const segs = id.split('/')
+  const leaf = segs[segs.length - 1] ?? id
+  if (leaf !== 'index') return leaf
+  const parent = segs[segs.length - 2]
+  return parent ?? siteConfig?.title ?? leaf
+}
+
 /*
  * id: walkDocs
  * fn: 递归扫盘，返回相对 docs/ 的 md 相对路径（统一用 / 分隔，id 即该路径去掉 .md）
@@ -260,7 +314,6 @@ const articlePathChecker = () => {
     console.error('[ERR]:文章文件夹不存在')
     return []
   }
-  console.log('[INFO]:文章文件夹存在')
   const files: string[] = []
   walkDocs(articlePath, '', 1, files)
   if (files.length === 0) {
@@ -290,7 +343,7 @@ const cleanVueDir = (dir: string, ids: Set<string>, relBase = ''): boolean => {
     }
     if (entry.name.endsWith('.vue') && !ids.has(rel.replace(/\.vue$/, ''))) {
       fs.rmSync(full)
-      console.log(`[INFO]:清除过时中间产物${rel}`)
+      info(`[INFO]:清除过时中间产物${rel}`)
       // 删掉了，本目录可能变空，empty 保持当前值
     } else {
       empty = false
@@ -314,15 +367,10 @@ const vuePathCleaner = (ids: Set<string>) => {
 const vuePathChecker = (ids: Set<string>) => {
   try {
     if (fs.existsSync(vuePath)) {
-      console.log('[INFO]:vue文件夹存在')
       vuePathCleaner(ids)
     } else {
       fs.mkdirSync(vuePath, { recursive: true })
-      if (fs.existsSync(vuePath)) {
-        console.log('[INFO]:原路径无vue文件夹,创建文件夹成功')
-      } else {
-        console.error('[ERR]:原路径无vue文件夹,创建文件夹失败')
-      }
+      info('[INFO]:原路径无 .cache 目录，已创建')
     }
   } catch (e) {
     console.error('[ERR]:vue文件夹操作失败', e)
@@ -335,17 +383,9 @@ const vuePathChecker = (ids: Set<string>) => {
  */
 const jsonPathChecker = () => {
   try {
-    if (fs.existsSync(jsonPath)) {
-      console.log('[INFO]:post.json存在')
-    } else {
-      ensureJsonDir()
-      fs.writeFileSync(jsonPath, '{}', 'utf8')
-      if (fs.existsSync(jsonPath)) {
-        console.log('[INFO]:原路径无post.json,创建文件成功')
-      } else {
-        console.error('[ERR]:原路径无post.json,创建文件失败')
-      }
-    }
+    if (fs.existsSync(jsonPath)) return
+    ensureJsonDir()
+    fs.writeFileSync(jsonPath, '{}', 'utf8')
   } catch (e) {
     console.error('[ERR]:post.json操作失败', e)
   }
@@ -383,7 +423,6 @@ const syncSiteConfig = () => {
   if (!siteConfig) return
   const site = serializeSiteConfig(siteConfig)
   fs.writeFileSync(path.join(vuePath, 'site.json'), JSON.stringify(site, null, 4), 'utf8')
-  console.log('[INFO]:站点配置已写入 .cache/site.json')
 }
 
 /*
@@ -456,11 +495,14 @@ const configFence = (md: InstanceType<typeof MarkdownIt>) => {
 
     // 组件插件：mermaid 与写作组件（timeline/steps/tabs/links/gallery 等，注册表统一调度）
     // highlight：code-group 等内嵌代码的组件用，编译期 shiki 高亮；未知语言回退纯文本
+    // renderMarkdown：提示块这类『块内正文仍要正常渲染』的组件用，嵌套跑一遍本实例
     const componentHtml = renderComponentFence(
       {
         escapeHtml: md.utils.escapeHtml,
         toolbar,
         splitRow,
+        renderMarkdown: (s: string): string => md.render(s),
+        pageKey: currentPageKey,
         highlight: (code: string, lang: string): string => {
           try {
             return highlighter!.codeToHtml(code, { lang, theme: highlightTheme })
@@ -471,6 +513,7 @@ const configFence = (md: InstanceType<typeof MarkdownIt>) => {
       },
       lang,
       token.content,
+      info,
     )
     if (componentHtml !== null) return componentHtml
 
@@ -506,10 +549,13 @@ const naturalCompare = (a: string, b: string) => collator.compare(a, b)
  * id: deriveSidebar
  * fn: 由 walkDocs 扫出的文件 id 列表派生侧栏树
  * 规则：
- *  - id 按 / 切段，中间段是目录 → 分组节点（无 link，纯折叠容器），末段是文件 → 叶子节点
- *  - 叶子 text 取文件名去 .md，与 post.json 的 title 推导（id.split('/').pop()）一致，
- *    保证侧栏、上下篇、搜索三处显示同一个名字
+ *  - id 按 / 切段，中间段是目录 → 分组节点，末段是文件 → 叶子节点
+ *  - 叶子 text 取文件名末段（目录索引页 index.md 例外，见 titleOf），与 post.json 的
+ *    title 用同一套推导，保证侧栏、上下篇、搜索三处显示同一个名字
  *  - 分组 text 取目录名原样（目录名即章节名，不做映射）
+ *  - 目录索引页 <dir>/index.md **不单独成叶子**，而是挂成该分组的 link ——
+ *    分组标题本身可点进索引页（PostSidebar 已支持分组的 link，点标题导航、点箭头折叠），
+ *    否则侧栏会出现一堆字面量『index』
  *  - 同级目录在前、文件在后，各自自然序
  * 注意：theme 侧分组 key 用祖先 text 链拼接（sidebar.ts），同级同名目录会撞 key —— docs 现状无同名兄弟目录
  */
@@ -533,16 +579,34 @@ const deriveSidebar = (files: string[]): SidebarNode[] => {
     return node
   }
 
+  // 目录前缀 → 索引页 id，待分组节点建好后再回填 link
+  const folderIndex = new Map<string, string>()
+
   for (const file of files) {
     const id = file.replace(/\.md$/, '')
     const segs = id.split('/')
     const leafName = segs.pop()!
-    const leaf: SidebarNode = { text: leafName, link: `/post/${id}` }
+    const prefix = segs.join('/')
+    // 先建目录：只有 index.md 的目录也必须出现在侧栏里（下面不再为它建叶子）
+    if (prefix) ensureFolder(prefix)
+
+    if (leafName === 'index') {
+      if (prefix) folderIndex.set(prefix, id)
+      // docs 根下的 index.md 没有所属分组，只能是顶级叶子，标题由 titleOf 取站点名
+      else root.push({ text: titleOf(id), link: `/post/${id}` })
+      continue
+    }
+
+    const leaf: SidebarNode = { text: titleOf(id), link: `/post/${id}` }
     if (segs.length === 0) {
       root.push(leaf) // docs/ 根目录下的散篇，直接作为顶级叶子
     } else {
-      ensureFolder(segs.join('/')).items!.push(leaf)
+      ensureFolder(prefix).items!.push(leaf)
     }
+  }
+
+  for (const [prefix, id] of folderIndex) {
+    ensureFolder(prefix).link = `/post/${id}`
   }
 
   const sortNodes = (nodes: SidebarNode[]) => {
@@ -560,7 +624,8 @@ const deriveSidebar = (files: string[]): SidebarNode[] => {
 
 /*
  * id: flattenSidebar
- * fn: DFS 展平派生树，只收有 link 的叶子，顺序即侧栏顺序 —— 上下篇按它取相邻下标
+ * fn: DFS 展平派生树，收下所有带 link 的节点（含挂了索引页的分组），
+ * 顺序即侧栏顺序 —— 上下篇按它取相邻下标，索引页因此也参与上下篇链条
  */
 const flattenSidebar = (nodes: SidebarNode[]): { id: string; title: string; link: string }[] => {
   const out: { id: string; title: string; link: string }[] = []
@@ -580,7 +645,6 @@ const flattenSidebar = (nodes: SidebarNode[]): { id: string; title: string; link
   walk(nodes)
   return out
 }
-
 /*
  * id: compileHome
  * fn: 首页内容源 src/theme/views/home.md → .cache/home.vue，与文章同一渲染管线，
@@ -598,9 +662,10 @@ const compileHome = (md: InstanceType<typeof MarkdownIt>, pluginMtime: number) =
     fs.statSync(homeVuePath).mtimeMs >= fs.statSync(scriptPath).mtimeMs &&
     fs.statSync(homeVuePath).mtimeMs >= pluginMtime
   if (fresh) return
+  currentPageKey = 'home'
   const rendered = md.render(fs.readFileSync(homeMdPath, 'utf8'))
   fs.writeFileSync(homeVuePath, `<template>${rendered}</template>`, 'utf8')
-  console.log('[INFO]:首页内容源已渲染为 .cache/home.vue')
+  info('[INFO]:首页内容源已渲染为 .cache/home.vue')
 }
 
 /*
@@ -610,11 +675,13 @@ const compileHome = (md: InstanceType<typeof MarkdownIt>, pluginMtime: number) =
 const mdParser = (files: string[]) => {
   const md = initMd()
   configFence(md)
-  setupComponentPlugins(md) // 挂载容器语法的组件插件（:::tip/info/warn/error 提示块）
+  setupComponentPlugins(md) // 挂载需要自定义 markdown-it 规则的组件（kbd/badge/mark 行内规则）
   const pluginMtime = pluginLatestMtime() // 插件最新 mtime：SFC/home 复用判定共用
   compileHome(md, pluginMtime) // 首页内容源同管线渲染，但不进侧栏树与 post.json
 
   const articles: Record<string, ArticleMeta> = {}
+  // 正文语料：搜索索引的数据源，与 SFC 同一轮遍历顺手产出，不额外读一遍盘
+  const corpus: Record<string, string> = {}
 
   for (const file of files) {
     const id = file.replace(/\.md$/, '') // 把文章名取出来
@@ -632,18 +699,23 @@ const mdParser = (files: string[]) => {
     const sfcFresh = sfcMtimeOk
 
     if (!sfcFresh) {
+      currentPageKey = id // 换页：分节面板的页内组序号随页归零
       const rendered = md.render(_) // 直接把文章内容转义为HTML（无 frontmatter，全文即正文）
       const vue = `<template>${rendered}</template>` // 把文章内容拼接成vue的HTML块
       fs.mkdirSync(path.dirname(sfcPath), { recursive: true })
       fs.writeFileSync(sfcPath, vue, 'utf8') // 把拼接好的块写入对应文件
     }
 
-    // 无 frontmatter：title 从文件名末段推导，updated 从源文件 mtime 推导
+    // 无 frontmatter：title 由 id 推导（目录索引页取目录名，见 titleOf），updated 取源文件 mtime
     articles[id] = {
-      title: id.split('/').pop() || id,
+      title: titleOf(id),
       updated: mtimeToDate(file),
     }
+    corpus[id] = toPlainText(_)
   }
+
+  // 正文语料落盘：theme 侧搜索按需动态 import 这一份（不进主包）
+  fs.writeFileSync(searchPath, JSON.stringify(corpus), 'utf8')
 
   // ---- 侧栏树：由扫盘结果派生，同一棵树既写盘供 theme 读，又用于推导上下篇 ----
   // 单一事实源：侧栏顺序 = 上下篇顺序，不存在配置与目录两处打架的可能
@@ -694,6 +766,7 @@ const manager = async () => {
     }
     ensureJsonDir()
     fs.writeFileSync(jsonPath, '{}', 'utf8')
+    fs.writeFileSync(searchPath, '{}', 'utf8')
     fs.writeFileSync(sidebarPath, '[]', 'utf8')
     syncPostMeta()
     syncSidebarMeta()
@@ -707,10 +780,11 @@ const manager = async () => {
   const sigFile = path.join(vuePath, '.compile-sig')
   const pendingFile = path.join(vuePath, '.compile-sig.pending')
   const readIfExists = (p: string) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '')
-  // 产物完整性：post.json 缺失时不短路，否则被删的产物永远不会被重建
-  const postJsonExists = fs.existsSync(jsonPath)
-  if (postJsonExists && (readIfExists(sigFile) === sig || readIfExists(pendingFile) === sig)) {
-    console.log('[INFO]:输入未变,短路复用.cache编译缓存')
+  // 产物完整性：post.json / search.json 任一缺失都不短路，否则被删的产物永远不会被重建
+  // （search.json 是搜索的语料来源，缺了搜索会静默退化成仅标题匹配）
+  const artifactsOk = fs.existsSync(jsonPath) && fs.existsSync(searchPath)
+  if (artifactsOk && (readIfExists(sigFile) === sig || readIfExists(pendingFile) === sig)) {
+    info('[INFO]:输入未变,短路复用.cache编译缓存')
     syncPostMeta() // .cache 被清时补建可 import 副本，保证 SSR 每次构建都读得到
     syncSidebarMeta() // 侧栏副本同理：短路时也要保证 .cache/sidebar.json 存在
     syncSiteConfig() // 配置产物同样补建：短路分支也要保证 site.json 存在

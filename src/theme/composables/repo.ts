@@ -13,6 +13,9 @@ import { site } from '@/composables/site'
 
 const hasRepo = () => !!site.SITE_REPO
 
+/** 仓库首页链接（顶栏 GitHub 图标用）；未配置 repo.url 时返回空串，入口据此不渲染 */
+export const repoHomeUrl = (): string => (site.SITE_REPO ? `https://github.com/${site.SITE_REPO}` : '')
+
 /** 仓库内该文章的源文件路径，如 docs/前端/Vue.md */
 const srcPath = (postKey: string) => `${site.SITE_DOCS_DIR}/${postKey}.md`
 

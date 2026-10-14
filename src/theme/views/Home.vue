@@ -8,6 +8,11 @@
  */
 import { defineAsyncComponent, shallowRef, type Component } from 'vue'
 import Render from '@/components/post/Render.vue'
+import { useSeo } from '@/composables/seo'
+import { site } from '@/composables/site'
+
+// 首页标题就用站名本身，不加「- 站名」后缀（首页顶着重复站名反而不像首页）
+useSeo(() => ({ title: site.SITE_TITLE, path: '/' }))
 
 // 首页正文：home.md 的编译产物，懒加载独立 chunk
 const homeLoaders = import.meta.glob<{ default: Component }>('/.cache/home.vue')

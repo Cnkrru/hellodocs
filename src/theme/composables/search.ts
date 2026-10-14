@@ -1,24 +1,47 @@
 import { ref, watch } from 'vue'
 import MiniSearch from 'minisearch'
+
 import { getRouter } from '@/router'
+import { postMeta } from './meta'
 
 /* ====================<search>==================== */
-type SearchDoc = { id: string; title: string; date: string; tags: string[] }
-type PostMeta = { title?: string; updated?: string; tags?: string[] }
+type SearchDoc = { id: string; title: string; updated: string; text: string }
 
 export const RefKeyword = ref('')
-export const RefSearchRes = ref<SearchDoc[]>([])
+export const RefSearchRes = ref<Omit<SearchDoc, 'text'>[]>([])
 export const searchOpen = ref(false)
 
 let miniSearch: MiniSearch<SearchDoc> | null = null
-let buildFlag = false
+let indexBuilt = false
 
-// 元数据：.cache/post.json 是构建期从 public/config/post.json 复制的可 import 同源副本
-// 用 import.meta.glob 而非静态 import —— 文章为空时该文件不生成，glob 返回空对象而非编译报错
-const metaMap = import.meta.glob<Record<string, PostMeta>>('/.cache/post.json', {
-  eager: true,
+/*
+ * 正文语料：.cache/search.json（parseArticle 从 md 源码提取的纯文本），按 id 索引。
+ *
+ * 不并进 post.json —— post.json 被多个模块 eager import（会进主包），塞进 224 篇正文
+ * 会把首屏体积顶上去。这里用非 eager 的 glob 拿到动态 import 加载器，
+ * 首次检索时才拉取，独立成 chunk；MiniSearch 的索引也在那时才构建。
+ */
+const textLoaders = import.meta.glob<Record<string, string>>('/.cache/search.json', {
   import: 'default',
 })
+
+let corpusPromise: Promise<Record<string, string>> | null = null
+
+const loadCorpus = (): Promise<Record<string, string>> => {
+  if (corpusPromise) return corpusPromise
+  corpusPromise = (async () => {
+    const loader = textLoaders['/.cache/search.json']
+    // 产物缺失（如 docs/ 为空）时按空语料处理，搜索降级为仅标题匹配，不打断页面
+    if (!loader) return {}
+    try {
+      return (await loader()) ?? {}
+    } catch {
+      console.error('[ERR]:正文语料加载失败，搜索降级为仅标题匹配')
+      return {}
+    }
+  })()
+  return corpusPromise
+}
 
 // 分词：中文按 2-gram 切，英文数字按分隔符切
 const slicer = (text: string) => {
@@ -37,32 +60,38 @@ const slicer = (text: string) => {
   return [...tokens]
 }
 
-// 建索引：数据源是构建期写入的 .cache/post.json，import 即得，不走运行时请求
-export const buildIndex = () => {
-  if (buildFlag) return
-
+/*
+ * 建索引：标题 + 正文纯文本都进检索字段；正文语料按需异步加载，故本函数是 async。
+ * Search.vue 在 onMounted 里 await 它；未就绪期间检索返回空结果（组装器有 null 守卫）
+ */
+export const buildIndex = async () => {
+  if (indexBuilt) return
   try {
-    const postMeta = metaMap['/.cache/post.json'] ?? {}
-    // krudoc 的 post.json 无 date 字段（parseArticle 只派生 title/updated），
+    const corpus = await loadCorpus()
     // 时间取 updated（源文件 mtime 推导），按时间倒序取全部文章
     const docs: SearchDoc[] = Object.entries(postMeta)
-      .map(([id, m]) => ({ id, title: m.title || id, date: m.updated || '', tags: m.tags || [] }))
-      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .map(([id, m]) => ({
+        id,
+        title: m.title || id,
+        updated: m.updated || '',
+        text: corpus[id] ?? '',
+      }))
+      .sort((a, b) => (a.updated < b.updated ? 1 : -1))
 
     miniSearch = new MiniSearch<SearchDoc>({
-      fields: ['title', 'tags', 'date'], // 参与检索的字段
-      storeFields: ['id', 'title', 'date', 'tags'], // 检索结果里返回的字段
+      fields: ['title', 'text'], // 参与检索的字段
+      // storeFields 不含 text：语料只用于打分，随结果回传会把长文本塞进每一行结果
+      storeFields: ['id', 'title', 'updated'],
       tokenize: slicer, // 中文分词
       searchOptions: {
-        boost: { title: 3, tags: 2, date: 1 }, // 标题权重最高
+        boost: { title: 3 }, // 标题权重高于正文
         fuzzy: 0.2, // 容错匹配
         prefix: true, // 允许前缀匹配
         combineWith: 'OR', // 多个 token 命中任一即可，提升召回
       },
     })
     miniSearch.addAll(docs)
-    buildFlag = true
-    console.info('[INFO]:minisearch初始化完成')
+    indexBuilt = true
   } catch {
     console.error('[ERR]:miniSearch初始化失败')
   }
@@ -75,15 +104,14 @@ const assembler = (key: string) => {
     RefSearchRes.value = []
     return
   }
-  // SearchResult 靠索引签名携带 storeFields，显式提取字段映射回 SearchDoc 契约
+  // SearchResult 靠索引签名携带 storeFields，显式提取字段映射回对外契约
   RefSearchRes.value = miniSearch
     .search(q)
     .slice(0, 10)
     .map((r) => ({
       id: String(r.id),
       title: r.title as string,
-      date: r.date as string,
-      tags: (r.tags as string[]) || [],
+      updated: r.updated as string,
     }))
 }
 

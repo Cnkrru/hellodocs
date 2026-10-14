@@ -7,8 +7,8 @@
  *   outDir    = USER_ROOT/dist
  * 编译插件与 ssgOptions 都以显式参数接收 ctx，不再依赖 import.meta.url 推路径。
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join, relative, resolve, sep } from 'node:path'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join, relative, sep } from 'node:path'
 
 import vue from '@vitejs/plugin-vue'
 import type { InlineConfig } from 'vite'
@@ -48,8 +48,6 @@ const mathmlTags = [
   'mstyle',
   'annotation',
 ]
-// giscus 的 web component，由浏览器 customElements 接管，Vue 按原生元素渲染
-const customTags = [...mathmlTags, 'giscus-widget']
 
 // 递归收集 .cache 下的 .vue 产物，返回相对 .cache 的 id（去掉 .vue 后缀，路径分隔符统一为 /）
 // .cache 目录可能不存在（首次构建/被手工清掉），此时返回空数组而非抛错
@@ -89,7 +87,7 @@ export const createEngineConfig = (ctx: BuildContext, env: EngineEnv): InlineCon
       vue({
         template: {
           compilerOptions: {
-            isCustomElement: (tag) => customTags.includes(tag),
+            isCustomElement: (tag) => mathmlTags.includes(tag),
           },
         },
       }),
@@ -114,7 +112,7 @@ export const createEngineConfig = (ctx: BuildContext, env: EngineEnv): InlineCon
     },
     server: {
       port: env.port,
-      // giscus iframe 跨域 fetch public/ 下的评论主题CSS，dev server 必须带 CORS 头
+      // 允许跨域取用站内静态资源（站点可能被外部页面嵌入引用），与 preview 侧保持一致
       cors: true,
       watch: {
         // 编译缓存目录不进 watcher，避免产物写入/更新触发 reload 循环
@@ -152,28 +150,12 @@ export const createSsgOptions = (ctx: BuildContext, outDir: string): ViteSSGOpti
     // 编译签名转正：走到这里说明本轮构建（打包+SSG 预渲染）完整成功，
     // pending 签名才有资格短路下次构建（详见 parseArticle.ts finalizeSignature）
     finalizeSignature(ctx)
-    // 404 产物的 head 修正：全站 SEO（useHead）尚未接入，title 仍是 index.html 的静态值。
-    // vite-ssg@28 没有 transformHtml 钩子，而 Vite 插件的 closeBundle 早于 SSG 写文件，
-    // 故只能放在 onFinished —— 此刻 dist/404.html 已落盘。全站 SEO 接通后本段即可删除。
-    const notFound = resolve(outDir, '404.html')
-    if (existsSync(notFound)) {
-      writeFileSync(
-        notFound,
-        readFileSync(notFound, 'utf8')
-          .replace(/<title>[\s\S]*?<\/title>/, `<title>页面不存在 - ${ctx.config.title}</title>`)
-          .replace(
-            /<meta name="viewport"/,
-            '<meta name="robots" content="noindex, nofollow">\n    <meta name="description" content="你访问的页面可能已被移动、重命名，或地址有误。">\n    <meta name="viewport"',
-          ),
-        'utf8',
-      )
-    } else {
-      console.warn('[404] dist/404.html 不存在，跳过 head 修正')
-    }
 
-    // sitemap 分级：首页最高、文章次之（并用真实更新时间做 lastmod）、归档/工具页最低
-    // 插件默认把全部页面写成 priority 1.0 + lastmod=构建时间，搜索引擎会忽略无区分度的权重
-    // docs/ 为空时 parseArticle 不会生成 post.json，这里兜空对象，否则 readFileSync 抛错让整个构建 exit 1
+    /*
+     * sitemap 分级：首页最高、文章次之（并用真实更新时间做 lastmod）、归档/工具页最低
+     * 插件默认把全部页面写成 priority 1.0 + lastmod=构建时间，搜索引擎会忽略无区分度的权重
+     * docs/ 为空时 parseArticle 不会生成 post.json，这里兜空对象，否则 readFileSync 抛错让整个构建 exit 1
+     */
     let posts: Record<string, { date?: string; updated?: string }> = {}
     try {
       posts = JSON.parse(readFileSync(join(resolvePublicDir(ctx.workDir), 'config/post.json'), 'utf8'))
@@ -193,6 +175,21 @@ export const createSsgOptions = (ctx: BuildContext, outDir: string): ViteSSGOpti
     for (const route of ['/postlist', '/category', '/tag', '/about', '/link', '/setting']) {
       priority[route] = 0.5
       changefreq[route] = 'monthly'
+    }
+
+    /*
+     * siteUrl 未配置时直接跳过：sitemap 的每条 <loc> 都是绝对地址，hostname 传空会让插件
+     * 产出一份指向本地/相对路径的错链，提交给搜索引擎比没有更糟。
+     * 只用前缀判断是否为可用绝对地址 —— 用户把域名写成 blog.some.com/path 也应放行
+     */
+    if (!/^https?:\/\//i.test(ctx.config.siteUrl)) {
+      console.warn(
+        '[sitemap] 未配置 siteUrl，已跳过 sitemap.xml 生成（在 vdoc.config.ts 填入站点绝对地址即可恢复）',
+      )
+      // robots.txt 仍要落一份：它原本是随 sitemap 插件一起产出的，跳过插件不等于能让爬虫拿到 404。
+      // 未配域名时不写 Sitemap 行 —— 指向一个不存在的文件比不声明更糟
+      writeFileSync(join(outDir, 'robots.txt'), 'User-agent: *\nAllow: /\n', 'utf8')
+      return
     }
 
     generateSitemap({

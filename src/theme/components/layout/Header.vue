@@ -7,7 +7,10 @@ import Search from '../Search.vue'
 import Theme from '../Theme.vue'
 import Github from '../icon/Github.vue'
 import PostLocalNav from '../post/PostLocalNav.vue'
+import { repoHomeUrl } from '@/composables/repo'
 import { toggleSidebarOpen, closeSidebar } from '@/composables/sidebar'
+// 仓库入口来自配置的 repo.url，未配置时不渲染，避免留一个点进去 404 的死链
+const repoUrl = repoHomeUrl()
 /* 汉堡按钮仅文档页显示：首页/404 没有侧栏，点了没意义；
    离开文档页时顺手收起抽屉，避免遮罩残留 */
 const route = useRoute()
@@ -31,8 +34,15 @@ watch(isPost, (v) => {
     <Search />
     <div class="el-list">
       <Nav />
-      <!-- TODO 仓库地址待定，先硬编码 GitHub 首页 -->
-      <a class="el-link" href="https://github.com/" target="_blank" rel="noopener noreferrer" title="GitHub">
+      <!-- 仓库入口：地址由 vdoc.config.ts 的 repo.url 拼出，未配置则不渲染 -->
+      <a
+        v-if="repoUrl"
+        class="el-link"
+        :href="repoUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="GitHub"
+      >
         <Github class="icon" />
       </a>
       <Theme />

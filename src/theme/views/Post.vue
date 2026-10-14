@@ -8,6 +8,9 @@ import PostNav from '@/components/post/PostNav.vue'
 import PostUpdate from '@/components/post/PostUpdate.vue'
 import PostEdit from '@/components/post/PostEdit.vue'
 import { loadContent } from '@/composables/content'
+import { postMeta } from '@/composables/meta'
+import { useSeo } from '@/composables/seo'
+import { site } from '@/composables/site'
 import { sidebarOpen, closeSidebar } from '@/composables/sidebar'
 // 仅点文档链接才收起抽屉：分组箭头的展开/折叠操作不收（避免误触关闭）
 const onSidebarClick = (e: MouseEvent) => {
@@ -16,6 +19,19 @@ const onSidebarClick = (e: MouseEvent) => {
 const route = useRoute()
 // pathMatch 是可重复参数，嵌套文章的 id 含斜杠（如 guide/install），需拼回完整 id
 const postKey = computed(() => (route.params.pathMatch as string[]).join('/'))
+
+/*
+ * 文章页 head：标题取编译期派生的 title（post.json），随路由变化 —— 传 getter 而非静态对象，
+ * SPA 内切文章时标题才会跟着换。description 暂用站点描述（文档无 frontmatter 摘要可提取）
+ */
+useSeo(() => {
+  const name = postMeta[postKey.value]?.title
+  // 标题恰好等于站名时不再拼后缀：docs 根下的 index.md 派生出的就是站点标题，
+  // 无条件拼接会得到「hello - hello」。缺标题（无效 id）时同样回退站名
+  const title = name && name !== site.SITE_TITLE ? `${name} - ${site.SITE_TITLE}` : site.SITE_TITLE
+  return { title, path: route.path }
+})
+
 // 文章正文按 id 懒加载（加载器与预取共用同一出处），每篇文章是独立 chunk，看哪篇加载哪篇
 const content = shallowRef<Component | null>(null)
 watch(

@@ -1,66 +1,61 @@
 /*
  * 代码组组件插件（code-group，VitePress 标准组件）
  *
- * 语法：围栏代码块语言名 code-group，块内以 == 标签名 == 分隔各代码面板：
+ * 语法：围栏代码块语言名 code-group，块内用 `@tab 标签名` 分节（VuePress Plume 的 content tabs 约定）：
  *   ```code-group
- *   == npm ==
+ *   @tab npm
  *   npm install
- *   == pnpm ==
+ *   @tab pnpm
  *   pnpm install
  *   ```
-n * 每个面板内容按『标签名』推断语言走 shiki 编译期高亮（标签名即语言名，如 npm 不识别则回退纯文本），
-n * 切换交互复用 tabs 的纯 CSS radio 方案，零运行时 JS。
-n */
+ * 每个面板内容按『标签名』推断语言走 shiki 编译期高亮（标签名即语言名，如 npm 不识别则回退纯文本），
+ * 切换交互复用 tabs 的纯 CSS radio 方案，零运行时 JS。
+ * 分节与分组导航走 panel.ts 共享管道（与 tabs / compare 同构）。
+ *
+ * 结构约定：HTML 片段一律抽成模块级 const 模板，render 只留解析与编排的 TS 逻辑。
+ */
 import type { ComponentPlugin } from './base.ts'
+import { panelTabs, splitPanels } from './panel.ts'
+
+/* ====================<HTML 模板>==================== */
+
+// 代码面板：shiki 产物（或降级代码块）塞进 body
+const CODE_GROUP_PANEL = (group: string, index: number, lang: string, body: string): string => `
+    <div class="tabs-panel code-group-panel" data-panel="${group}-${index}">
+        <div class="language-${lang}" v-pre>${body}</div>
+    </div>`
+
+// 无 shiki 能力时的降级代码块
+const CODE_GROUP_PLAIN = (esc: (s: string) => string, code: string): string =>
+  `<pre class="shiki"><code>${esc(code)}</code></pre>`
+
+const CODE_GROUP_WRAP = (nav: string, bodies: string): string => `
+<div class="tabs code-group" v-pre>${nav}${bodies}
+</div>`
+
+/* ====================<插件实现>==================== */
 
 export const codeGroupBlock: ComponentPlugin = {
   name: 'code-group',
   fenceLangs: ['code-group'],
 
-  render(ctx, lang, content) {
-    if (lang !== 'code-group') return null
+  render(ctx, content) {
     const esc = ctx.escapeHtml
-
-    // 与 tabs 同款分隔：== 标签名 == 切分面板
-    const parts = content.split(/^==\s*(.+?)\s*==$/m).slice(1)
-    const panels: { name: string; body: string }[] = []
-    for (let i = 0; i + 1 < parts.length; i += 2) {
-      panels.push({ name: (parts[i] ?? '').trim(), body: (parts[i + 1] ?? '').trim() })
-    }
-    if (panels.length === 0) {
-      console.warn('[WARN]:code-group 代码块内未找到任何 == 标签名 == 分隔，已按空块跳过')
-      return ''
-    }
-
-    // 同页多组 code-group 的 radio name 需隔离：以首标签名+面板数做稳定组名
-    const group = `cg-${panels[0]!.name}-${panels.length}`
-    const nav = panels
-      .map(
-        (p, i) => `
-    <input type="radio" id="${group}-${i}" name="${group}"${i === 0 ? ' checked' : ''}>
-    <label for="${group}-${i}">${esc(p.name)}</label>`,
-      )
-      .join('')
+    const panels = splitPanels(content, 'code-group')
+    if (panels.length === 0) return ''
+    const { group, nav } = panelTabs(ctx, 'cg', panels)
 
     // 面板内容：优先走编译期 shiki 高亮（标签名即语言名），未提供高亮能力时回退纯文本
     const bodies = panels
       .map((p, i) => {
-        const langName = p.name.toLowerCase()
-        let codeHtml: string
-        if (ctx.highlight) {
-          codeHtml = ctx.highlight(p.body, langName)
-        } else {
-          codeHtml = `<pre class="shiki"><code>${esc(p.body)}</code></pre>`
-        }
-        return `
-    <div class="tabs-panel code-group-panel" data-panel="${group}-${i}">
-        <div class="language-${langName}" v-pre>${codeHtml}</div>
-    </div>`
+        const label = p.name.toLowerCase()
+        // 类名直接拼进 HTML 属性，先消毒再落盘；送 shiki 的仍是原标签名，着色行为不变
+        const attrLang = label.replace(/[^\w-]/g, '') || 'text'
+        const codeHtml = ctx.highlight ? ctx.highlight(p.body, label) : CODE_GROUP_PLAIN(esc, p.body)
+        return CODE_GROUP_PANEL(group, i, attrLang, codeHtml)
       })
       .join('')
 
-    return `
-<div class="tabs code-group" v-pre>${nav}${bodies}
-</div>`
+    return CODE_GROUP_WRAP(nav, bodies)
   },
 }

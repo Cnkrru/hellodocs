@@ -2,10 +2,14 @@
 /*
  * 404 页：站内路径写错、或文章被移出 docs/ 后的兜底
  *
- * noindex 说明：全站 SEO（useHead）尚未接入，meta 只能由 vite.config.ts 的 ssgOptions.head
- * 静态注入 —— 该配置对所有页面生效，故用 transformHtml 只对 404 产物补 noindex，
- * 避免搜索引擎收录错误页。全站 SEO 接通后即可删掉本页注释块与 transformHtml
+ * noindex 与标题由 useSeo 按页注入，不再依赖构建期改写 dist/404.html 的字符串手术
+ * —— 那条路径只在 onFinished 里对单页生效，且改的是产出的 HTML，客户端路由切到 404
+ * 时 meta 不会跟着变。走 unhead 后 SSG 与客户端是同一份声明。
  */
+import { useSeo } from '@/composables/seo'
+import { site } from '@/composables/site'
+
+useSeo(() => ({ title: `页面不存在 - ${site.SITE_TITLE}`, path: '/404', noindex: true }))
 </script>
 
 <template>
