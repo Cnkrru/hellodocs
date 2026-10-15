@@ -26,8 +26,8 @@ const postKey = computed(() => (route.params.pathMatch as string[]).join('/'))
  */
 useSeo(() => {
   const name = postMeta[postKey.value]?.title
-  // 标题恰好等于站名时不再拼后缀：docs 根下的 index.md 派生出的就是站点标题，
-  // 无条件拼接会得到「hello - hello」。缺标题（无效 id）时同样回退站名
+  // 标题恰好等于站名时不再拼后缀：无条件拼接会得到「hello - hello」，
+  // 文档标题与站名重名时同样适用。缺标题（无效 id）时也回退站名
   const title = name && name !== site.SITE_TITLE ? `${name} - ${site.SITE_TITLE}` : site.SITE_TITLE
   return { title, path: route.path }
 })

@@ -83,12 +83,12 @@ const scriptPath = fileURLToPath(import.meta.url)
 const dirPath = path.dirname(scriptPath)
 
 /*
- * 日志分级：进度类 info 默认静默，VDOC_DEBUG=1 时打开；warn / error 始终输出。
+ * 日志分级：进度类 info 默认静默，HD_DEBUG=1 时打开；warn / error 始终输出。
  * CLI 是给用户跑的命令，「文章文件夹存在」「post.json 存在」这类过程日志每次构建都刷屏，
- * 会把真正的警告淹没（bin/vdoc.mjs 也已按「保持输出干净」收窄了错误输出）
+ * 会把真正的警告淹没（bin/hd.mjs 也已按「保持输出干净」收窄了错误输出）
  */
 const info = (...args: unknown[]) => {
-  if (process.env.VDOC_DEBUG) console.log(...args)
+  if (process.env.HD_DEBUG) console.log(...args)
 }
 
 // 产物路径全部由 BuildContext 派生，本轮编译开始时绑定一次。
@@ -118,7 +118,7 @@ const bindContext = (ctx: BuildContext) => {
   searchPath = path.join(vuePath, 'search.json')
   sidebarPath = path.join(ctx.workDir, 'public/config/sidebar.json')
   sidebarMetaPath = path.join(vuePath, 'sidebar.json')
-  // 首页内容源：用户 home.md（缺省回退包内模板）→ .cache/home.vue，
+  // 首页内容源：内容目录顶层的 index.md（缺省回退包内模板）→ .cache/home.vue，
   // 与文章同一渲染管线，但不进侧栏树与 post.json
   homeMdPath = ctx.homeMdPath
   homeVuePath = path.join(vuePath, 'home.vue')
@@ -185,7 +185,7 @@ const compileSignature = (files: string[]): string => {
       return `__plugin_${path.relative(dirPath, f)}__:${s.mtimeMs}:${s.size}`
     })
   })()
-  // 首页内容源同样掺入签名：home.md 改动后不能被短路缓存挡住，否则新内容永远不生效
+  // 首页内容源同样掺入签名：顶层 index.md 改动后不能被短路缓存挡住，否则新内容永远不生效
   const homeTag = (() => {
     try {
       const s = fs.statSync(homeMdPath)
@@ -272,15 +272,15 @@ const toPlainText = (source: string): string =>
  * id: titleOf
  * fn: 由文章 id 推导显示标题
  * 常规取文件名末段（与侧栏、上下篇、搜索三处显示同一个名字）；
- * 例外是目录索引页 index.md —— 它代表所在目录，标题取目录名，
- * 否则侧栏会出现一堆字面量『index』相互无区别（docs 根下那个取站点标题）
+ * 例外是目录索引页 <dir>/index.md —— 它代表所在目录，标题取目录名，
+ * 否则侧栏会出现一堆字面量『index』相互无区别。
+ * 内容目录顶层的 index.md 是首页，已被 walkDocs 排除，不会走到这里
  */
 const titleOf = (id: string): string => {
   const segs = id.split('/')
   const leaf = segs[segs.length - 1] ?? id
   if (leaf !== 'index') return leaf
-  const parent = segs[segs.length - 2]
-  return parent ?? siteConfig?.title ?? leaf
+  return segs[segs.length - 2] ?? leaf
 }
 
 /*
@@ -296,6 +296,8 @@ const walkDocs = (dir: string, prefix: string, depth: number, out: string[]) => 
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     // 隐藏文件与 .md 之外的产物一律不进文档树
     if (entry.name.startsWith('.')) continue
+    // 内容目录顶层的 index.md 是首页内容源（路由 /），不属于文章树：不进文章列表、侧栏与上下篇
+    if (depth === 1 && entry.name === 'index.md') continue
     const rel = prefix ? `${prefix}/${entry.name}` : entry.name
     if (entry.isDirectory()) {
       walkDocs(path.join(dir, entry.name), rel, depth + 1, out)
@@ -556,6 +558,7 @@ const naturalCompare = (a: string, b: string) => collator.compare(a, b)
  *  - 目录索引页 <dir>/index.md **不单独成叶子**，而是挂成该分组的 link ——
  *    分组标题本身可点进索引页（PostSidebar 已支持分组的 link，点标题导航、点箭头折叠），
  *    否则侧栏会出现一堆字面量『index』
+ *  - 内容目录顶层的 index.md 是首页，已被 walkDocs 排除，不会出现在这棵树里
  *  - 同级目录在前、文件在后，各自自然序
  * 注意：theme 侧分组 key 用祖先 text 链拼接（sidebar.ts），同级同名目录会撞 key —— docs 现状无同名兄弟目录
  */
@@ -591,9 +594,7 @@ const deriveSidebar = (files: string[]): SidebarNode[] => {
     if (prefix) ensureFolder(prefix)
 
     if (leafName === 'index') {
-      if (prefix) folderIndex.set(prefix, id)
-      // docs 根下的 index.md 没有所属分组，只能是顶级叶子，标题由 titleOf 取站点名
-      else root.push({ text: titleOf(id), link: `/post/${id}` })
+      folderIndex.set(prefix, id)
       continue
     }
 
@@ -647,7 +648,7 @@ const flattenSidebar = (nodes: SidebarNode[]): { id: string; title: string; link
 }
 /*
  * id: compileHome
- * fn: 首页内容源 src/theme/views/home.md → .cache/home.vue，与文章同一渲染管线，
+ * fn: 首页内容源（内容目录顶层 index.md，缺省回退包内模板）→ .cache/home.vue，与文章同一渲染管线，
  *     但不进侧栏树与 post.json（首页不是文章）。源文件不存在时清掉过时产物。
  *     mtime 增量与文章 SFC 同规则：产物不旧于源文件与本脚本则跳过重渲染
  */
@@ -755,7 +756,7 @@ const manager = async () => {
   // 空文章目录：走"全清"分支。直接 return 会留下已删文章的过时 SFC 和 post.json 残留，
   // 下游 includedRoutes 会照着这些幽灵产物预渲染出已不存在的文章页
   if (files.length === 0) {
-    // 空文档目录也要渲染首页内容源（若存在）：home.md 不依赖 docs/ 的文章
+    // 空文档目录也要渲染首页内容源（若存在）：首页内容不依赖任何文章
     vuePathChecker(new Set(fs.existsSync(homeMdPath) ? ['home'] : []))
     if (fs.existsSync(homeMdPath)) {
       await configLanguage([homeMdPath])
@@ -791,7 +792,7 @@ const manager = async () => {
     return
   }
   // 2. 检查缓存与元数据文件路径（清除已删除文章的过时产物）
-  // home 产物不在文章扫盘范围：home.md 存在时显式保留，避免被当过时产物清掉
+  // home 产物不在文章扫盘范围：顶层 index.md 存在时显式保留，避免被当过时产物清掉
   const ids = new Set(files.map((f) => f.replace(/\.md$/, '')))
   if (fs.existsSync(homeMdPath)) ids.add('home')
   vuePathChecker(ids)

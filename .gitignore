@@ -41,6 +41,6 @@ __screenshots__/
 # vite-ssg 预渲染临时目录（构建结束自动清理，留此规则防中断残留）
 .vite-ssg-temp/
 
-# vdoc 生成物：Vite root 与全部编译/构建中间产物都落在这里
-.vdoc/
+# hd 生成物：Vite root 与全部编译/构建中间产物都落在这里
+.hd/
 # docs/ 是站点正文，属于内容资产，必须入库 —— 之前被忽略导致 clone 下来是空站

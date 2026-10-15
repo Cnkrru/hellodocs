@@ -34,7 +34,7 @@ watch(isPost, (v) => {
     <Search />
     <div class="el-list">
       <Nav />
-      <!-- 仓库入口：地址由 vdoc.config.ts 的 repo.url 拼出，未配置则不渲染 -->
+      <!-- 仓库入口：地址由 hd.config.ts 的 repo.url 拼出，未配置则不渲染 -->
       <a
         v-if="repoUrl"
         class="el-link"

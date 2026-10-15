@@ -1,9 +1,9 @@
 {
-  "name": "@hello/vdoc",
+  "name": "hellodocs",
   "version": "0.1.0",
   "description": "基于 Vue 3 + Vite 的静态文档站生成器：docs/ 目录即站点，编译期直出静态 HTML",
   "keywords": [
-    "vdoc",
+    "hd",
     "ssg",
     "static-site-generator",
     "docs",
@@ -16,16 +16,15 @@
   "author": "Cnkrru <J19323850@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Cnkrru/KruDocs.git"
+    "url": "git+https://github.com/Cnkrru/hello-vdoc.git"
   },
   "type": "module",
   "bin": {
-    "vdoc": "bin/vdoc.mjs"
+    "hd": "bin/hd.mjs"
   },
   "files": [
     "bin",
-    "src",
-    "index.html"
+    "src"
   ],
   "exports": {
     ".": {
@@ -35,10 +34,10 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "dev": "node ./bin/vdoc.mjs dev",
+    "dev": "node ./bin/hd.mjs dev",
     "build": "run-p type-check \"build-only {@}\" --",
-    "preview": "node ./bin/vdoc.mjs preview",
-    "build-only": "node ./bin/vdoc.mjs build",
+    "preview": "node ./bin/hd.mjs preview",
+    "build-only": "node ./bin/hd.mjs build",
     "type-check": "vue-tsc --build",
     "lint": "run-s \"lint:*\"",
     "lint:oxlint": "oxlint . --fix",

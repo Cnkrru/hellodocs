@@ -3,7 +3,7 @@
  *
  * 语法：围栏代码块，语言名 terminal，以 `$ ` 开头的行按命令渲染，其余按输出渲染：
  *   ```terminal
- *   $ npm i -D @hello/vdoc
+ *   $ npm i -D hellodocs
  *   added 1 package
  *   ```
  * Mac 风格三色圆点顶栏，编译期直出纯 HTML。

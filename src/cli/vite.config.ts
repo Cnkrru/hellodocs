@@ -184,7 +184,7 @@ export const createSsgOptions = (ctx: BuildContext, outDir: string): ViteSSGOpti
      */
     if (!/^https?:\/\//i.test(ctx.config.siteUrl)) {
       console.warn(
-        '[sitemap] 未配置 siteUrl，已跳过 sitemap.xml 生成（在 vdoc.config.ts 填入站点绝对地址即可恢复）',
+        '[sitemap] 未配置 siteUrl，已跳过 sitemap.xml 生成（在 hd.config.ts 填入站点绝对地址即可恢复）',
       )
       // robots.txt 仍要落一份：它原本是随 sitemap 插件一起产出的，跳过插件不等于能让爬虫拿到 404。
       // 未配域名时不写 Sitemap 行 —— 指向一个不存在的文件比不声明更糟

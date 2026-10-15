@@ -26,5 +26,5 @@ export const preview = async (options: PreviewOptions) => {
     server: { cors: true },
   })
   server.printUrls()
-  console.log(`[vdoc] 预览 ${outDir}`)
+  console.log(`[hd] 预览 ${outDir}`)
 }

@@ -18,21 +18,22 @@ import {
 } from './paths.ts'
 import type { BuildContext } from './types.ts'
 
-/* 首页内容源：用户项目根的 home.md 优先，缺省回退包内模板 */
-const resolveHomeMd = (userRoot: string) => {
-  const userHome = path.join(userRoot, 'home.md')
-  return fs.existsSync(userHome) ? userHome : packageHomeTemplate
+/* 首页内容源：内容目录顶层的 index.md 优先，缺省回退包内模板 */
+const resolveHomeMd = (articleDir: string) => {
+  const userIndex = path.join(articleDir, 'index.md')
+  return fs.existsSync(userIndex) ? userIndex : packageHomeTemplate
 }
 
 export const createBuildContext = async (userRoot: string, configPath?: string): Promise<BuildContext> => {
   const raw = await loadUserConfig(userRoot, configPath)
   const config = resolveConfig(raw, userRoot)
+  const articleDir = path.join(userRoot, config.docsDir)
   return {
     userRoot,
     workDir: resolveWorkDir(userRoot),
-    articleDir: path.join(userRoot, config.docsDir),
+    articleDir,
     maxDepth: config.maxDepth,
-    homeMdPath: resolveHomeMd(userRoot),
+    homeMdPath: resolveHomeMd(articleDir),
     config,
   }
 }

@@ -3,7 +3,7 @@
  *
  * 语法：围栏代码块，语言名 steps，每行『标题 | 描述（可省略）』：
  *   ```steps
- *   安装 | npm i -D @hello/vdoc
+ *   安装 | npm i -D hellodocs
  *   ```
  * 序号由编译期自动生成，不写进内容里。
  */

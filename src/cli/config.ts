@@ -10,9 +10,9 @@ import path from 'node:path'
 
 import { createJiti } from 'jiti'
 
-import { defaultConfig, type VdocConfig, type ResolvedConfig } from '../config/site.config.ts'
+import { defaultConfig, type HdConfig, type ResolvedConfig } from '../config/site.config.ts'
 
-const CONFIG_FILES = ['vdoc.config.ts', 'vdoc.config.mts', 'vdoc.config.js', 'vdoc.config.mjs']
+const CONFIG_FILES = ['hd.config.ts', 'hd.config.mts', 'hd.config.js', 'hd.config.mjs']
 
 /* 定位用户配置文件：显式 --config 优先，否则在 USER_ROOT 下按序探测；都没有则返回 null，由 loadUserConfig 报错 */
 const findConfigFile = (userRoot: string, configPath?: string): string | null => {
@@ -29,14 +29,14 @@ const findConfigFile = (userRoot: string, configPath?: string): string | null =>
 }
 
 /* 运行时加载用户 TS 配置；找不到配置文件直接报错（落到 title 必填会让人以为配置写错，而非文件不存在） */
-export const loadUserConfig = async (userRoot: string, configPath?: string): Promise<VdocConfig> => {
+export const loadUserConfig = async (userRoot: string, configPath?: string): Promise<HdConfig> => {
   const file = findConfigFile(userRoot, configPath)
   if (!file) {
     throw new Error(`未找到配置文件：${userRoot} 下缺少 ${CONFIG_FILES[0]}（可用 --config 指定其它路径）`)
   }
   const jiti = createJiti(import.meta.url)
   // default: true 等价于 mod?.default ?? mod，兼容 export default 与整体导出两种写法
-  const raw = await jiti.import<VdocConfig>(file, { default: true })
+  const raw = await jiti.import<HdConfig>(file, { default: true })
   if (!raw || typeof raw !== 'object') {
     throw new Error(`配置文件未导出配置对象：${file}`)
   }
@@ -44,9 +44,9 @@ export const loadUserConfig = async (userRoot: string, configPath?: string): Pro
 }
 
 /* 合并默认值 + 校验边界，产出编译管线可用的 ResolvedConfig */
-export const resolveConfig = (raw: VdocConfig, userRoot: string): ResolvedConfig => {
+export const resolveConfig = (raw: HdConfig, userRoot: string): ResolvedConfig => {
   if (typeof raw.title !== 'string' || raw.title.trim() === '') {
-    throw new Error('vdoc.config 缺少必填项 title（非空字符串）')
+    throw new Error('hd.config 缺少必填项 title（非空字符串）')
   }
   const docsDir = raw.docsDir ?? defaultConfig.docsDir
   const articleDir = path.join(userRoot, docsDir)

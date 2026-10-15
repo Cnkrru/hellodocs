@@ -24,5 +24,5 @@ export const build = async (options: BuildOptions) => {
     outDir,
   })
   await ssgBuild(createSsgOptions(ctx, outDir), config)
-  console.log(`[vdoc] 构建完成：${outDir}`)
+  console.log(`[hd] 构建完成：${outDir}`)
 }

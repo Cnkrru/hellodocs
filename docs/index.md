@@ -11,10 +11,10 @@
 ## 开始使用
 
 ```steps
-安装 | npm i -D @hello/vdoc
+安装 | npm i -D hellodocs
 写内容 | 在 docs/ 下新建 Markdown，目录层级即侧栏分组
-本地预览 | npx vdoc dev，热更新实时生效
-产出静态站 | npx vdoc build，dist/ 即为可部署产物
+本地预览 | npx hd dev，热更新实时生效
+产出静态站 | npx hd build，dist/ 即为可部署产物
 ```
 
 ## 文档导航
@@ -32,5 +32,5 @@ hello 设计原则
 ```
 
 ```tip 关于本页
-本页由仓库根目录的 `home.md` 驱动——根目录存在 `home.md` 时覆盖引擎内置模板，编辑后重新构建即可更新首页。
+本页由内容目录顶层的 `docs/index.md` 驱动——它即站点首页（路由 `/`），不进侧栏与文章列表，编辑后重新构建即可更新。
 ```

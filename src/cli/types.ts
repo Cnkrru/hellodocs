@@ -9,6 +9,6 @@ export type BuildContext = {
   workDir: string // 生成物根，同时是 Vite root
   articleDir: string // 内容目录绝对路径，= userRoot/docsDir
   maxDepth: number
-  homeMdPath: string // 首页内容源：用户 home.md，缺省回退包内模板
+  homeMdPath: string // 首页内容源：内容目录顶层 index.md，缺省回退包内模板
   config: ResolvedConfig // 已合并、已校验
 }

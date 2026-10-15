@@ -2,9 +2,9 @@
 /*
  * 首页：完全由 Markdown 驱动
  *
- * 正文源 src/theme/views/home.md 在编译期由 parseArticle.ts 渲染为 .cache/home.vue
+ * 正文源（内容目录顶层 index.md，缺省回退 src/theme/views/home.md）在编译期由 parseArticle.ts 渲染为 .cache/home.vue
  * （与文章同一管线：shiki 高亮、写作组件、KaTeX 全支持），此处懒加载渲染该产物。
- * 首页内容改动只需编辑 home.md 并重新构建，本组件不含任何写死内容。
+ * 首页内容改动只需编辑顶层 index.md 并重新构建，本组件不含任何写死内容。
  */
 import { defineAsyncComponent, shallowRef, type Component } from 'vue'
 import Render from '@/components/post/Render.vue'
@@ -14,7 +14,7 @@ import { site } from '@/composables/site'
 // 首页标题就用站名本身，不加「- 站名」后缀（首页顶着重复站名反而不像首页）
 useSeo(() => ({ title: site.SITE_TITLE, path: '/' }))
 
-// 首页正文：home.md 的编译产物，懒加载独立 chunk
+// 首页正文：顶层 index.md 的编译产物，懒加载独立 chunk
 const homeLoaders = import.meta.glob<{ default: Component }>('/.cache/home.vue')
 const homeContent = shallowRef<Component | null>(null)
 const homeLoader = homeLoaders['/.cache/home.vue']

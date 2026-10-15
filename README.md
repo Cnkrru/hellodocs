@@ -9,7 +9,7 @@ hello —— 基于 Vue 3 + Vite 的静态文档站生成器。
 第一步，安装。
 
 ```sh
-npm i -D @hello/vdoc
+npm i -D hellodocs
 ```
 
 第二步，建内容目录 `docs/` 并放入 Markdown 文件。
@@ -17,14 +17,13 @@ npm i -D @hello/vdoc
 - 目录层级 = 侧栏分组，同级按文件名自然序
 - 文件名末段 = 文章标题；文件 mtime = 「最后编辑」时间
 - 路由为 `/post/<相对 docs/ 的路径去掉 .md>`
-- 目录索引页 `index.md` 代表所在目录：它挂成该分组的可点击标题（不再单独占一行「index」），
-  `docs/index.md` 则取站点标题为名
-- 项目根可放 `home.md` 覆盖首页正文，缺省用引擎内置模板
+- 目录索引页 `<目录>/index.md` 代表所在目录：它挂成该分组的可点击标题（不再单独占一行「index」）
+- 内容目录顶层的 `index.md` 是首页正文（路由 `/`），不进侧栏、不进文章列表；缺省用引擎内置模板
 
-第三步，在项目根建 `vdoc.config.ts`（仅 `title` 必填）。
+第三步，在项目根建 `hd.config.ts`（仅 `title` 必填）。
 
 ```ts
-import { defineConfig } from '@hello/vdoc'
+import { defineConfig } from 'hellodocs'
 
 export default defineConfig({
   title: '我的文档',
@@ -37,27 +36,27 @@ export default defineConfig({
 })
 ```
 
-引擎运行期把生成物写在 `<项目根>/.vdoc/`（中间产物与配置快照），构建产物默认写 `<项目根>/dist/`。两者都建议加进 `.gitignore`。
+引擎运行期把生成物写在 `<项目根>/.hd/`（中间产物与配置快照），构建产物默认写 `<项目根>/dist/`。两者都建议加进 `.gitignore`。
 
 ---
 
 ## 命令
 
 ```sh
-vdoc dev        # 启动开发服务器
-vdoc build      # 构建静态站点，产出 dist/
-vdoc preview    # 本地预览已构建产物
+hd dev          # 启动开发服务器
+hd build        # 构建静态站点，产出 dist/
+hd preview      # 本地预览已构建产物
 ```
 
 可用选项。
 
-- `--config <path>` 指定配置文件（相对项目根），默认探测 `vdoc.config.ts`
+- `--config <path>` 指定配置文件（相对项目根），默认探测 `hd.config.ts`
 - `--port <number>` dev / preview 端口
 - `--base <path>` 部署基础路径，默认 `/`
 - `--outDir <dir>` build 产物目录（相对项目根），默认 `dist`
 - `-h, --help` 显示帮助
 
-`vdoc <command> [root]` 的 `root` 缺省为当前工作目录，即项目根。
+`hd <command> [root]` 的 `root` 缺省为当前工作目录，即项目根。
 
 ---
 
@@ -106,20 +105,20 @@ vdoc preview    # 本地预览已构建产物
 
 ```sh
 npm install
-npm run dev        # = vdoc dev
-npm run build      # = type-check + vdoc build
-npm run preview    # = vdoc preview
+npm run dev        # = hd dev
+npm run build      # = type-check + hd build
+npm run preview    # = hd preview
 ```
 
-站点实值在仓库根的 [vdoc.config.ts](vdoc.config.ts)，配置契约与默认值在 `src/config/site.config.ts`。打包发布面见 `package.json` 的 `bin` / `files` / `exports`。
+站点实值在仓库根的 [hd.config.ts](hd.config.ts)，配置契约与默认值在 `src/config/site.config.ts`。打包发布面见 `package.json` 的 `bin` / `files` / `exports`。
 
 ---
 
 ## 关键要点
 
-1. 用户侧只需 `docs/` + `vdoc.config.ts`，其余全部由引擎提供
-2. 命令面为 `vdoc dev` / `build` / `preview`，参数走 Node 内置解析，无额外依赖
-3. 生成物落项目根 `.vdoc/`，构建产物默认 `dist/`，均建议 gitignore
+1. 用户侧只需 `docs/` + `hd.config.ts`，其余全部由引擎提供
+2. 命令面为 `hd dev` / `build` / `preview`，参数走 Node 内置解析，无额外依赖
+3. 生成物落项目根 `.hd/`，构建产物默认 `dist/`，均建议 gitignore
 4. 侧栏与上下篇由 `docs/` 目录结构派生，无需手写配置
 5. 配置改后要重新编译，开发模式不热更新配置
 6. 本仓库用 CLI 自我驱动，改动引擎后旧文章缓存会自动失效

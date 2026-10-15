@@ -1,7 +1,7 @@
 /*
  * 引擎配置契约：类型 + 默认值 + defineConfig + 序列化
  *
- * 站点实值由用户侧的 vdoc.config.ts 提供（用户只写差异，其余走默认）。
+ * 站点实值由用户侧的 hd.config.ts 提供（用户只写差异，其余走默认）。
  * src/cli/config.ts 负责加载用户配置、与这里的默认值合并、校验，产出 ResolvedConfig；
  * 编译期再由 parseArticle 把 ResolvedConfig 序列化成 .cache/site.json 供 theme 读取。
  * 改配置后需重新编译才生效（开发模式不热更新配置）。
@@ -21,7 +21,7 @@ export type RepoConfig = {
 }
 
 /* 用户配置：除 title 外全部可选，只写与默认值的差异 */
-export type VdocConfig = {
+export type HdConfig = {
   title: string
   description?: string
   keywords?: string
@@ -68,7 +68,7 @@ export const defaultConfig: ResolvedConfig = {
 }
 
 /* 用户配置书写入口：仅做类型收窄，运行时原样返回 */
-export const defineConfig = (config: VdocConfig): VdocConfig => config
+export const defineConfig = (config: HdConfig): HdConfig => config
 
 /*
  * ResolvedConfig → .cache/site.json 的键名映射

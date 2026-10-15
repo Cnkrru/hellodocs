@@ -1,5 +1,5 @@
 /*
- * CLI 命令面：vdoc dev / build / preview
+ * CLI 命令面：hd dev / build / preview
  * 参数解析用 Node 内置 parseArgs（零新增依赖），命令实现各管各的 vite 调用方式
  */
 import { parseArgs } from 'node:util'
@@ -9,13 +9,13 @@ import { dev } from './dev.ts'
 import { preview } from './preview.ts'
 
 export { defineConfig } from '../config/site.config.ts'
-export type { HomeCard, VdocConfig, NavItem, RepoConfig, ResolvedConfig } from '../config/site.config.ts'
+export type { HomeCard, HdConfig, NavItem, RepoConfig, ResolvedConfig } from '../config/site.config.ts'
 export type { BuildContext } from './types.ts'
 
-const HELP = `vdoc —— 整站文档生成器
+const HELP = `hellodocs —— 整站文档生成器
 
 用法：
-  vdoc <command> [root] [options]
+  hd <command> [root] [options]
 
 命令：
   dev       启动开发服务器
@@ -23,7 +23,7 @@ const HELP = `vdoc —— 整站文档生成器
   preview   本地预览已构建的产物
 
 选项：
-  --config <path>   指定配置文件（相对 root），默认探测 vdoc.config.ts
+  --config <path>   指定配置文件（相对 root），默认探测 hd.config.ts
   --port <number>   dev / preview 的端口
   --base <path>     部署基础路径，默认 /
   --outDir <dir>    build / preview 的产物目录（相对 root），默认 dist
